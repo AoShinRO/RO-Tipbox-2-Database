@@ -993,5 +993,10 @@ namespace TipboxToDatabase
             }
           */
         }
+
+        private void fullsync_Checked(object sender, RoutedEventArgs e)
+        {
+
+        }
     }
 }

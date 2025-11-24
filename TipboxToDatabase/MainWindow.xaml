@@ -73,13 +73,13 @@
                    HorizontalAlignment="Left" VerticalAlignment="Top" FontSize="15" TextAlignment="Center"
                    Margin="36,230,0,0" Width="680" Height="25"
                    TextWrapping="Wrap" />
-        <CheckBox x:Name="tipansi" Content="is ANSI?" HorizontalAlignment="Left" Margin="29,173,0,0" VerticalAlignment="Top" IsChecked="{Binding tipansi, Source={x:Static properties:Settings.Default}}" />
-        <CheckBox x:Name="dropable_only" Content="dropable?" HorizontalAlignment="Left" Margin="104,173,0,0" VerticalAlignment="Top" IsChecked="{Binding dropable, Source={x:Static properties:Settings.Default}}" />
-        <TextBlock x:Name="InputFolderPath" Text="Select your mobs folder"
+        <CheckBox x:Name="tipansi" Content="ANSI output" HorizontalAlignment="Left" Margin="29,173,0,0" VerticalAlignment="Top" IsChecked="{Binding tipansi, Source={x:Static properties:Settings.Default}}" />
+        <CheckBox x:Name="dropable_only" Content="dropable only" HorizontalAlignment="Left" Margin="131,173,0,0" VerticalAlignment="Top" IsChecked="{Binding dropable, Source={x:Static properties:Settings.Default}}" />
+        <TextBlock x:Name="InputFolderPath" Text="Select your mob spawn folder"
             HorizontalAlignment="Left" VerticalAlignment="Top" FontSize="10" TextAlignment="Center"
             Margin="620,56,0,0" Width="150" Height="40"
             TextWrapping="Wrap" />
-        <Button Content="mobs folder" FontFamily="Tahoma" FontWeight="Bold"
+        <Button Content="spawn folder" FontFamily="Tahoma" FontWeight="Bold"
             HorizontalAlignment="Left" VerticalAlignment="Top"
             Margin="643,11,0,0" Width="100" Height="40"
             Click="SelectFolderButton_Click" />
