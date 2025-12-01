@@ -25,6 +25,12 @@ public class Items
     public int Id { get; set; }
     public string Name { get; set; }
     public string AegisName { get; set; }
+    public string Type { get; set; }
+    public string SubType { get; set; }
+    public int EquipLevelMin { get; set; }
+    public int Refinable { get; set; }
+    public int Gradeable { get; set; }
+    public int Location { get; set; }
 }
 
 public class Drop
@@ -37,6 +43,7 @@ public class Drop
 public class Monster
 {
     public int Id { get; set; }
+    public string AegisName { get; set; }
     public string Name { get; set; }
     public int Level { get; set; }
     public int Hp { get; set; }
@@ -65,6 +72,14 @@ public class TipBoxInfo
     public string Image { get; set; }
     public int Size { get; set; }
     public string Page { get; set; }
+    public dbTypes Type { get; set; }
+}
+
+public enum dbTypes
+{
+    MOB,
+    CARD,
+    ITEM
 }
 
 namespace TipboxToDatabase
@@ -260,7 +275,10 @@ namespace TipboxToDatabase
             StatusText.Text = "Building tipbox.lub.";
             ConversionProgressBar.Value = 90;
             await Task.Delay(200);
-            GenerateTipboxFile(num2CardData, itemInfoData, cardaegis, mobdbData, items);
+            Dictionary<int, TipBoxInfo> TipBoxes = GenerateTipboxFile(num2CardData, itemInfoData, cardaegis, mobdbData, items);
+            GenerateGuideMonsterLua(TipBoxes, mobdbData, items);
+            GenerateGuideWeaponLua(TipBoxes, mobdbData, items);
+            GenerateGuideArmorLua(TipBoxes, mobdbData, items);
             await Task.Delay(200);
             ConversionProgressBar.Value = 100;
             StatusText.Text = "tipbox.lub generated successfully.";
@@ -349,8 +367,40 @@ namespace TipboxToDatabase
                                 : string.Empty,
                             AegisName = itemNode.Children.ContainsKey(new YamlScalarNode("AegisName"))
                                 ? itemNode["AegisName"]?.ToString()
-                                : string.Empty
+                                : string.Empty,
+                            Type = itemNode.Children.ContainsKey(new YamlScalarNode("Type"))
+                                ? itemNode["Type"]?.ToString()
+                                : string.Empty,
+                            SubType = itemNode.Children.ContainsKey(new YamlScalarNode("SubType"))
+                                ? itemNode["SubType"]?.ToString()
+                                : string.Empty,
+                            EquipLevelMin = itemNode.Children.ContainsKey(new YamlScalarNode("EquipLevelMin"))
+                                ? int.Parse(itemNode["EquipLevelMin"].ToString())
+                                : 0,
+                            Refinable = itemNode.Children.ContainsKey(new YamlScalarNode("Refinable")) && itemNode["Refinable"].ToString().ToLower() == "true"? 1 : 0,
+                            Gradeable = itemNode.Children.ContainsKey(new YamlScalarNode("Gradeable")) && itemNode["Gradeable"].ToString().ToLower() == "true"? 1 : 0
                         };
+
+                        if (itemNode.Children.ContainsKey(new YamlScalarNode("Locations")))
+                        {
+                            var locNode = itemNode["Locations"] as YamlMappingNode;
+
+                            foreach (var loc in locNode.Children)
+                            {
+                                string locationName = loc.Key.ToString();
+                                bool value = bool.Parse(loc.Value.ToString());
+
+                                if (value && locationMap.TryGetValue(locationName, out int locId))
+                                {
+                                    item.Location = locId;
+                                    break; // pegamos a primeira localização válida
+                                }
+                            }
+                        }
+                        else
+                        {
+                            item.Location = -1; // sem localização
+                        }
 
                         if (!string.IsNullOrEmpty(item.AegisName))
                         {
@@ -402,7 +452,11 @@ namespace TipboxToDatabase
                 else if (currentMonster != null)
                 {
                     // Processar outras propriedades
-                    if (line.StartsWith("Name:"))
+                    if (line.StartsWith("AegisName:"))
+                    {
+                        currentMonster.AegisName = line.Substring(line.IndexOf(':') + 1).Trim();
+                    }
+                    else if (line.StartsWith("Name:"))
                     {
                         currentMonster.Name = line.Substring(line.IndexOf(':') + 1).Trim();
                     }
@@ -727,7 +781,7 @@ namespace TipboxToDatabase
             return mobDictionary;
         }
 
-        private void GenerateTipboxFile(Dictionary<int, string> num2CardData, Dictionary<int, (string Title, string Resource, List<string> Description)> itemInfoData, Dictionary<string, Card> carddb, Dictionary<int, Monster> mobdb, Dictionary<string, Items> itemdb)
+        private Dictionary<int, TipBoxInfo> GenerateTipboxFile(Dictionary<int, string> num2CardData, Dictionary<int, (string Title, string Resource, List<string> Description)> itemInfoData, Dictionary<string, Card> carddb, Dictionary<int, Monster> mobdb, Dictionary<string, Items> itemdb)
         {
             Dictionary<int, TipBoxInfo> TipBoxDB = new Dictionary<int, TipBoxInfo>();
             var mobData = ParseMobsFromFolder(mobspawfolder);
@@ -745,6 +799,7 @@ namespace TipboxToDatabase
                                 {
                                     if (mob.Key == mobinfo.Id)
                                     {
+                                        
                                         TipBoxInfo Info = new TipBoxInfo();
                                         string page = string.Empty;
                                         page += $"Id: {mobinfo.Id}\\nName: {mobinfo.Name}\\nLevel: {mobinfo.Level}\\nHp: {mobinfo.Hp}\\nAttack: {mobinfo.Attack}\\nDefense: {mobinfo.Defense}\\nMagicDefense: {mobinfo.MagicDefense}\\nResistence: {mobinfo.Resistence}\\nMagicResistence: {mobinfo.Level}\\nStr: {mobinfo.Str}\\nVit: {mobinfo.Vit}\\nAgi: {mobinfo.Agi}\\nInt: {mobinfo.Int}\\nDex: {mobinfo.Dex}\\nLuk: {mobinfo.Luk}\\nSize: {mobinfo.Size}\\nRace: {mobinfo.Race}\\nElement: {mobinfo.Element}";
@@ -784,6 +839,7 @@ namespace TipboxToDatabase
                                         Info.Image = $"À¯ÀúÀÎÅÍÆäÀÌ½º\\\\cardbmp\\\\{cinfo}";
                                         Info.Size = 100;
                                         Info.Page = page;
+                                        Info.Type = dbTypes.MOB;
                                         TipBoxDB[id] = Info;
                                     }
                                 }
@@ -797,10 +853,9 @@ namespace TipboxToDatabase
 
             foreach (var id in itemInfoData.Keys)
             {
-                TipBoxInfo Info = new TipBoxInfo();
                 while (TipBoxDB.TryGetValue(count, out var tbdb))
                     count++;
-
+                TipBoxInfo Info = new TipBoxInfo();
                 if (itemInfoData.TryGetValue(id, out var itemInfo))
                 {
                     if (dropable_only.IsChecked == true)
@@ -814,11 +869,13 @@ namespace TipboxToDatabase
                     Info.Title = $"{itemInfo.Title} [{id}]";
                     if (num2CardData.TryGetValue(id, out var cardinfo))
                     {
+                        Info.Type = dbTypes.CARD;
                         Info.Image = $"À¯ÀúÀÎÅÍÆäÀÌ½º\\\\cardbmp\\\\{num2CardData[id]}";
                         Info.Size = 100;
                     }
                     else
                     {
+                        Info.Type = dbTypes.ITEM;
                         Info.Image = $"À¯ÀúÀÎÅÍÆäÀÌ½º\\\\collection\\\\{itemInfo.Resource}";
                         Info.Size = 200;
                     }
@@ -865,7 +922,6 @@ namespace TipboxToDatabase
             }
 
             using (var writer = new StreamWriter("tipbox.lub", false, tipansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8))
-
             {
                 writer.WriteLine("tbl = {");
 
@@ -894,109 +950,222 @@ namespace TipboxToDatabase
                 writer.WriteLine("}");
                 WriteEndTipbox(writer);
             }
-            /*
-            using (var writer = new StreamWriter("tipbox.lub", false, Encoding.GetEncoding(1252)))
-            {
-                writer.WriteLine("tbl = {");
-                StatusText.Text = "Building tipbox.lub.";
 
-                int count = 1;
-                foreach (var id in itemInfoData.Keys)
-                {
-                    if (itemInfoData.TryGetValue(id, out var itemInfo))
-                    {
-                        if (num2CardData.TryGetValue(id, out var cardinfo))
-                        {
-                            writer.WriteLine($"\t[{count}] = {{");
-                            writer.WriteLine($"\t\tTitle = \"{itemInfo.Title} [{id}]\",");
-                            writer.WriteLine("\t\tSearch = 1,");
-                            writer.WriteLine($"\t\tImage = \"À¯ÀúÀÎÅÍÆäÀÌ½º\\\\cardbmp\\\\{num2CardData[id]}\",");
-                            writer.WriteLine("\t\tImgcoord = { Position = 5, Size = 100 },");
-                            writer.WriteLine("\t\tPage = {");
-                            writer.WriteLine($"\t\t\t\"ItemID:[{id}]\\n_______________________\\n{string.Join("\\n", itemInfo.Description.Select(d => d.Replace("\n", "\\n").Replace("\r", "").Replace("\"", "").Trim()))}\"");
-                            writer.WriteLine("\t\t}");
-                            writer.WriteLine("\t},");
-                        }
-                        else
-                        {
-                            writer.WriteLine($"\t[{count}] = {{");
-                            writer.WriteLine($"\t\tTitle = \"{itemInfo.Title} [{id}]\",");
-                            writer.WriteLine("\t\tSearch = 1,");
-                            writer.WriteLine($"\t\tImage = \"À¯ÀúÀÎÅÍÆäÀÌ½º\\\\collection\\\\{itemInfo.Resource}\",");
-                            writer.WriteLine("\t\tImgcoord = { Position = 5, Size = 200 },");
-                            writer.WriteLine("\t\tPage = {");
-                            writer.WriteLine($"\t\t\t\"ItemID:[{id}]\\n_______________________\\n{string.Join("\\n", itemInfo.Description.Select(d => d.Replace("\n", "\\n").Replace("\r", "").Replace("\"", "").Trim()))}\"");
-                            writer.WriteLine("\t\t}");
-                            writer.WriteLine("\t},");
-                        }
-                        count++;
-                    }
-                }
-                bool last_key;
-                int key_count = 1;
-                foreach (var id in mobdb.Keys)
-                {
-                    last_key = (bool)(key_count == mobdb.Count - 1);
-                    key_count++;
-                    if (mobdb.TryGetValue(id, out var mobinfo))
-                    {
-                        foreach (var drop in mobinfo.Drops)
-                        {
-                            if (carddb.TryGetValue(drop.AegisName, out var thiscard))
-                            {
-                                if (num2CardData.TryGetValue(thiscard.Id, out var cinfo))
-                                {
-                                    writer.WriteLine($"\t[{count}] = {{");
-                                    writer.WriteLine($"\t\tTitle = \"{mobinfo.Name} [{mobinfo.Id}]\",");
-                                    writer.WriteLine("\t\tSearch = 1,");
-                                    writer.WriteLine($"\t\tImage = \"À¯ÀúÀÎÅÍÆäÀÌ½º\\\\cardbmp\\\\{cinfo}\",");
-                                    writer.WriteLine("\t\tImgcoord = { Position = 5, Size = 100 },");
-                                    writer.WriteLine("\t\tPage = {");
-                                    string page = string.Empty;
-                                    page += $"Id: {mobinfo.Id}\\nName: {mobinfo.Name}\\nLevel: {mobinfo.Level}\\nHp: {mobinfo.Hp}\\nAttack: {mobinfo.Attack}\\nDefense: {mobinfo.Defense}\\nMagicDefense: {mobinfo.MagicDefense}\\nResistence: {mobinfo.Resistence}\\nMagicResistence: {mobinfo.Level}\\nStr: {mobinfo.Str}\\nVit: {mobinfo.Vit}\\nAgi: {mobinfo.Agi}\\nInt: {mobinfo.Int}\\nDex: {mobinfo.Dex}\\nLuk: {mobinfo.Luk}\\nSize: {mobinfo.Size}\\nRace: {mobinfo.Race}\\nElement: {mobinfo.Element}";
-                                    if (mobinfo.MvpDrops.Count > 0)
-                                    {
-                                        page += $"\\nMVPDrops:";
-                                        foreach (var d in mobinfo.MvpDrops)
-                                        {
-                                            if (itemdb.TryGetValue(d.AegisName, out var it))
-                                            {
-                                                string dropdisplay = $"<ITEM>{it.Name}<INFO>{it.Id}</INFO></ITEM>";
-                                                page += $"\\n{dropdisplay}  - {d.Rate / 100.0:F2}%";
-                                            }
-                                        }
-                                    }
-                                    if (mobinfo.Drops.Count > 0)
-                                    {
-                                        page += $"\\nDrops:";
-                                        foreach (var d in mobinfo.Drops)
-                                        {
-                                            if (itemdb.TryGetValue(d.AegisName, out var it))
-                                            {
-                                                string dropdisplay = $"<ITEM>{it.Name}<INFO>{it.Id}</INFO></ITEM>";
-                                                page += $"\\n: {dropdisplay}  - {d.Rate / 100.0:F2}%";
-                                            }
-                                        }
-                                    }
-                                    writer.WriteLine($"\t\t\t\"{page}\"");
-                                    writer.WriteLine("\t\t}");
-                                    string lastword = last_key == true ? string.Empty : ",";
-                                    writer.WriteLine($"\t}}{lastword}");
-                                }
-                            }
-                            count++;
-                        }
-                    }
-                }
-                writer.WriteLine("}");
-                WriteEndTipbox(writer);
-            }
-          */
+            return TipBoxDB;
         }
 
-        private void fullsync_Checked(object sender, RoutedEventArgs e)
+        private void GenerateGuideMonsterLua(Dictionary<int, TipBoxInfo> TipBoxes,Dictionary<int, Monster> mobdb, Dictionary<string, Items> itemdb)
         {
+            // Ordena monstros por level asc (se empate, por Id)
+            var mobs = mobdb.Values
+                .OrderBy(m => m.Level)
+                .ThenBy(m => m.Id)
+                .ToList();
 
+            using (var sw = new StreamWriter("guide_monster.lub", false, tipansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8))
+            {
+                sw.WriteLine("GuideMonster.TitleText = \"Monster\"");
+                sw.WriteLine("GuideMonster.MainMenuIndex = 2");
+                sw.WriteLine("GuideMonster.MainMenuTitle = \"Monster\"");
+
+                foreach (var mob in mobs)
+                {              
+                    string aegisName = mob.AegisName;
+                    
+                    // Calcula level range (padrão: min = max(1, lvl-10); max = min + 15)
+                    int minLv = Math.Max(1, mob.Level - 15);
+                    int maxLv = mob.Level + 15;
+
+                    // Monta string de drops: ^i[id] ^i[id2] ...
+                    var dropIds = new List<int>();
+                    foreach (var d in mob.Drops)
+                    {
+                        if (d == null) continue;
+                        if (itemdb.TryGetValue(d.AegisName, out var itm))
+                        {
+                            if (!dropIds.Contains(itm.Id))
+                                dropIds.Add(itm.Id);
+                        }
+                    }
+
+                    // Se não há drops mapeados, podemos pular ou gerar com string vazia
+                    if (dropIds.Count == 0)
+                    {
+                        if(Properties.Settings.Default.dropable)
+                            continue;
+                    }
+
+                    string dropsStr = string.Join(" ", dropIds.Select(i => $"^i[{i}]"));
+
+                    // Escreve a linha GuideMonster:AddContents("AegisName", min, max, "drops")
+                    // Observação: no seu modelo o nome do monstro é string simples (sem escapar), garante que o aegisName esteja limpo
+                    sw.WriteLine($"GuideMonster:AddContents(\"{aegisName}\", {minLv}, {maxLv}, \"{dropsStr}\")");
+                }
+            }
         }
+
+        private void GenerateGuideWeaponLua(Dictionary<int, TipBoxInfo> TipBoxes, Dictionary<int, Monster> mobdb, Dictionary<string, Items> itemdb)
+        {
+            // Ordena monstros por level asc (se empate, por Id)
+            var items = itemdb.Values
+                .OrderBy(m => m.EquipLevelMin)
+                .ThenBy(m => m.Id)
+                .ToList();
+
+            using (var sw = new StreamWriter("guide_weapon.lub", false, tipansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8))
+            {
+                sw.WriteLine("GuideWeapon.TitleText = \"Weapon\"");
+                sw.WriteLine("GuideWeapon.MainMenuIndex = 5");
+                sw.WriteLine("GuideWeapon.MainMenuTitle = \"Weapon\"");
+                sw.WriteLine("GuideWeapon:AddSubMenu(0, \"Dagger\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(1, \"One - Handed Sword\", 1, 999)");              
+                sw.WriteLine("GuideWeapon:AddSubMenu(2, \"Two - Handed Sword\", 1, 999)");           
+                sw.WriteLine("GuideWeapon:AddSubMenu(3, \"One - Handed Axe\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(4, \"Mace\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(5, \"One - Handed Staff\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(6, \"Knuckle\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(7, \"Musical Instrument\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(8, \"Whip\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(9, \"Book\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(10, \"Two - Handed Sword\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(11, \"Two - Handed Spear\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(12, \"Two - Handed Axe\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(13, \"Katar\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(14, \"Bow\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(15, \"Huuma Shuriken\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(16, \"Two - Handed Staff\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(17, \"Revover\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(18, \"Rifle\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(19, \"Gatling Gun\", 1, 999)");
+                sw.WriteLine("GuideWeapon:AddSubMenu(20, \"Shotgun\", 1, 999)");                        
+                sw.WriteLine("GuideWeapon:AddSubMenu(21, \"Grenade Launcher\", 1, 999)");
+                foreach (var item in items)
+                {
+                    if (item.Type.ToLower() != "weapon")
+                        continue;
+
+                    int minLv = Math.Max(item.EquipLevelMin, 1);
+                    int maxLv = Math.Min(275, minLv + 100);
+                    int tipboxId = GetTipBoxPosition(TipBoxes, item.Id);
+                    if (Properties.Settings.Default.dropable)
+                    {
+                        if (tipboxId <= 0)
+                            continue;
+                    }
+                    string stream = $"GuideWeapon:AddContents({item.Id}, {GetWeaponTableValue(item.SubType)}, {minLv}, {maxLv}, {item.Refinable}, 0, {item.Gradeable}, \"\",";
+                    if (tipboxId >= 0)
+                        stream += $"\">> <TIPBOX>{item.Name}<INFO>{tipboxId}</INFO></TIPBOX>\")";
+                    else
+                        stream += "\"\")";
+                    sw.WriteLine(stream);
+                }
+            }
+        }
+
+        private int GetTipBoxPosition(Dictionary<int, TipBoxInfo> TipBoxes, int id)
+        {
+            var sortedKeys = TipBoxes.Keys.OrderBy(k => k).ToList();
+            foreach (var it in sortedKeys)
+            {
+                if (TipBoxes[it].Type != dbTypes.ITEM)
+                    continue;
+                if (TipBoxes[it].Id == id)
+                    return it;
+            }
+            return -1;
+        }
+
+        private int GetWeaponTableValue(string val)
+        {
+            switch (val.ToLower())
+            {
+                case "dagger": return 0;
+                case "1hsword": return 1;
+                case "2hsword": return 2;
+                case "1haxe": return 3;
+                case "mace": return 4;
+                case "staff": return 5;
+                case "knuckle": return 6;
+                case "musical": return 7;
+                case "whip": return 8;
+                case "book": return 9;
+                //case "2hsword": return 10;
+                case "2hspear": return 11;
+                case "2haxe": return 12;
+                case "katar": return 13;
+                case "bow": return 14;
+                case "huuma": return 15;
+                case "2hstaff": return 16;
+                case "revolver": return 17;
+                case "rifle": return 18;
+                case "gatling": return 19;
+                case "shotgun": return 20;
+                case "grenade": return 21;
+            }
+            return 0;
+        }
+
+        Dictionary<string, int> locationMap = new Dictionary<string, int>
+        {
+            { "Head_Top", 0 },
+            { "Head_Mid", 1 },
+            { "Head_Low", 2 },
+            { "Armor", 3 },
+            { "Garment", 4 },
+            { "Left_Hand", 5 },    // Shield
+            { "Shoes", 6 },
+            { "Accessory", 7 },
+            { "Right_Accessory", 8 },
+            { "Left_Accessory", 9 },
+            { "Both_Accessory", 7 } // Pode ajustar depois
+        };
+
+        private void GenerateGuideArmorLua(Dictionary<int, TipBoxInfo> TipBoxes, Dictionary<int, Monster> mobdb, Dictionary<string, Items> itemdb)
+        {
+            // Ordena monstros por level asc (se empate, por Id)
+            var items = itemdb.Values
+                .OrderBy(m => m.EquipLevelMin)
+                .ThenBy(m => m.Id)
+                .ToList();
+
+            using (var sw = new StreamWriter("guide_armor.lub", false, tipansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8))
+            {
+                sw.WriteLine("GuideArmor.TitleText = \"Armor\"");
+                sw.WriteLine("GuideArmor.MainMenuIndex = 6");
+                sw.WriteLine("GuideArmor.MainMenuTitle = \"Armor\"");
+                sw.WriteLine("GuideArmor:AddSubMenu(0, \"Upper Headgear\", 1, 999)");
+                sw.WriteLine("GuideArmor:AddSubMenu(1, \"Middle Headgear\", 1, 999)");
+                sw.WriteLine("GuideArmor:AddSubMenu(2, \"Lower Headgear\", 1, 999)");
+                sw.WriteLine("GuideArmor:AddSubMenu(3, \"Armor\", 1, 999)");
+                sw.WriteLine("GuideArmor:AddSubMenu(4, \"Garment\", 1, 999)");
+                sw.WriteLine("GuideArmor:AddSubMenu(5, \"Shield\", 1, 999)");
+                sw.WriteLine("GuideArmor:AddSubMenu(6, \"Shoes\", 1, 999)");
+                sw.WriteLine("GuideArmor:AddSubMenu(7, \"Accessory\", 1, 999)");
+                sw.WriteLine("GuideArmor:AddSubMenu(8, \"Accessory Right\", 1, 999)");
+                sw.WriteLine("GuideArmor:AddSubMenu(9, \"Accessory Left\", 1, 999)");
+                foreach (var item in items)
+                {
+                    if (item.Type.ToLower() != "armor")
+                        continue;
+                    
+                    int minLv = Math.Max(item.EquipLevelMin,1);
+                    int maxLv = Math.Min(275, minLv + 100);
+
+                    int tipboxId = GetTipBoxPosition(TipBoxes, item.Id);
+                    if (Properties.Settings.Default.dropable)
+                    {
+                        if (tipboxId <= 0)
+                            continue;
+                    }
+                    string stream = $"GuideArmor:AddContents({item.Id}, {item.Location}, {minLv}, {maxLv}, {item.Refinable}, 0, {item.Gradeable}, \"\",";
+                    if (tipboxId > 0)
+                        stream += $"\">> <TIPBOX>{item.Name}<INFO>{tipboxId}</INFO></TIPBOX>\")";
+                    else
+                        stream += "\"\")";
+                    sw.WriteLine(stream);
+                }
+            }
+        }
+
     }
 }
