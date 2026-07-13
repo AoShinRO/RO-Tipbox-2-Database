@@ -252,86 +252,164 @@ namespace TipboxToDatabase
             Generate_Tipbox_Main((sender as Button));
         }
 
+        private void LogError(string funcao, Exception ex)
+        {
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    StatusText.Text = $"Erro em {funcao}: {ex.Message}";
+                });
+            }
+            catch
+            {
+                StatusText.Text = $"Erro em {funcao}: {ex.Message}";
+            }
+
+            try
+            {
+                string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tipbox_error.log");
+                using (var sw = new StreamWriter(logPath, true, Encoding.UTF8))
+                {
+                    sw.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Função: {funcao}");
+                    sw.WriteLine($"Tipo: {ex.GetType().Name}");
+                    sw.WriteLine($"Mensagem: {ex.Message}");
+                    sw.WriteLine($"Stack Trace:\n{ex.StackTrace}");
+                    sw.WriteLine(new string('-', 80));
+                }
+            }
+            catch
+            {
+            }
+        }
+
         public async void Generate_Tipbox_Main(Button sender)
         {
-            StatusText.Text = "Reading Num2CardFile.";
-            var num2CardData = ParseNum2CardFile(num2CardFilePath);
-            ConversionProgressBar.Value = 17;
-            await Task.Delay(200);
-            StatusText.Text = "Reading Iteminfo.";
-            var itemInfoData = ParseItemInfoFile(itemInfoFilePath);
-            ConversionProgressBar.Value = 34;
-            await Task.Delay(200);
-            StatusText.Text = "Separating Card Info";
-            var cardaegis = ParseCardYaml(itemdbetcFilePath);
-            ConversionProgressBar.Value = 51;
-            await Task.Delay(200);
-            var items = ParseItemDBYaml();
-            ConversionProgressBar.Value = 68;
-            await Task.Delay(200);
-            StatusText.Text = "Reading mob_db.yml";
-            var mobdbData = ParseMonsterYaml(mobdbFilePath);
-            var spawnData = ParseMobsFromFolder(mobspawfolder);
-            ConversionProgressBar.Value = 75;
-            await Task.Delay(200);
-            StatusText.Text = "Building Files.";
-            ConversionProgressBar.Value = 90;
-            await Task.Delay(200);
-            Dictionary<int, TipBoxInfo> TipBoxes = GenerateTipboxFile(num2CardData, itemInfoData, cardaegis, mobdbData, items, spawnData);
-            GenerateGuideMonsterLua(TipBoxes, mobdbData, items, spawnData);
-            GenerateGuideWeaponLua(TipBoxes, mobdbData, items);
-            GenerateGuideArmorLua(TipBoxes, mobdbData, items);
-            await Task.Delay(200);
-            ConversionProgressBar.Value = 100;
-            StatusText.Text = "Files generated successfully.";
-            (sender).IsEnabled = true;
+            try
+            {
+                StatusText.Text = "Reading Num2CardFile.";
+                var num2CardData = ParseNum2CardFile(num2CardFilePath);
+                ConversionProgressBar.Value = 17;
+                await Task.Delay(200);
+                StatusText.Text = "Reading Iteminfo.";
+                var itemInfoData = ParseItemInfoFile(itemInfoFilePath);
+                ConversionProgressBar.Value = 34;
+                await Task.Delay(200);
+                StatusText.Text = "Separating Card Info";
+                var cardaegis = ParseCardYaml(itemdbetcFilePath);
+                ConversionProgressBar.Value = 51;
+                await Task.Delay(200);
+                var items = ParseItemDBYaml();
+                ConversionProgressBar.Value = 68;
+                await Task.Delay(200);
+                StatusText.Text = "Reading mob_db.yml";
+                var mobdbData = ParseMonsterYaml(mobdbFilePath);
+                var spawnData = ParseMobsFromFolder(mobspawfolder);
+                ConversionProgressBar.Value = 75;
+                await Task.Delay(200);
+                StatusText.Text = "Building Files.";
+                ConversionProgressBar.Value = 90;
+                await Task.Delay(200);
+                Dictionary<int, TipBoxInfo> TipBoxes = GenerateTipboxFile(num2CardData, itemInfoData, cardaegis, mobdbData, items, spawnData);
+                GenerateGuideMonsterLua(TipBoxes, mobdbData, items, spawnData);
+                GenerateGuideWeaponLua(TipBoxes, mobdbData, items);
+                GenerateGuideArmorLua(TipBoxes, mobdbData, items);
+                await Task.Delay(200);
+                ConversionProgressBar.Value = 100;
+                StatusText.Text = "Files generated successfully.";
+            }
+            catch (Exception ex)
+            {
+                LogError("Generate_Tipbox_Main", ex);
+            }
+            finally
+            {
+                (sender).IsEnabled = true;
+            }
         }
 
         private Dictionary<string, Card> ParseCardYaml(string filePath)
         {
-            var cards = new Dictionary<string, Card>();
-
-            // Load the YAML
-            using (var reader = new StreamReader(filePath, etcansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8))
+            if (!File.Exists(filePath))
             {
-                var yamlStream = new YamlStream();
-                yamlStream.Load(reader);
-
-                // Access the root node
-                var rootNode = (YamlMappingNode)yamlStream.Documents[0].RootNode;
-                var bodyNode = (YamlSequenceNode)rootNode.Children[new YamlScalarNode("Body")];
-
-                // Iterate through each monster node
-                foreach (YamlMappingNode cardNode in bodyNode)
-                {
-                    if (!cardNode.Children.ContainsKey(new YamlScalarNode("Type")) ||
-                        cardNode["Type"]?.ToString() != "Card")
-                        continue;
-
-                    var card = new Card
-                    {
-                        Id = cardNode.Children.ContainsKey(new YamlScalarNode("Id"))
-                            ? int.Parse(cardNode["Id"].ToString())
-                            : 0,
-                        Name = cardNode.Children.ContainsKey(new YamlScalarNode("Name"))
-                            ? cardNode["Name"]?.ToString()
-                            : string.Empty,
-                        AegisName = cardNode.Children.ContainsKey(new YamlScalarNode("AegisName"))
-                            ? cardNode["AegisName"]?.ToString()
-                            : string.Empty
-                    };
-
-                    // Add to dictionary
-                    if (!string.IsNullOrEmpty(card.AegisName))
-                    {
-                        if (cards.ContainsKey(card.AegisName))
-                            continue;
-                        cards[card.AegisName] = card;
-                    }
-                }
+                throw new FileNotFoundException($"Arquivo de cartas não encontrado: {filePath}");
             }
 
-            return cards;
+            try
+            {
+                var cards = new Dictionary<string, Card>();
+
+                // Load the YAML
+                using (var reader = new StreamReader(filePath, etcansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8))
+                {
+                    var yamlStream = new YamlStream();
+                    yamlStream.Load(reader);
+
+                    if (yamlStream.Documents.Count == 0)
+                    {
+                        throw new InvalidDataException("O arquivo YAML de cartas não possui documentos.");
+                    }
+
+                    // Access the root node
+                    var rootNode = yamlStream.Documents[0].RootNode as YamlMappingNode;
+                    if (rootNode == null)
+                    {
+                        throw new InvalidDataException("O nó raiz do arquivo YAML de cartas é inválido.");
+                    }
+
+                    var bodyKey = new YamlScalarNode("Body");
+                    if (!rootNode.Children.ContainsKey(bodyKey))
+                    {
+                        throw new InvalidDataException("O nó 'Body' não foi encontrado no arquivo YAML de cartas.");
+                    }
+
+                    var bodyNode = rootNode.Children[bodyKey] as YamlSequenceNode;
+                    if (bodyNode == null)
+                    {
+                        throw new InvalidDataException("O nó 'Body' no arquivo YAML de cartas não é uma sequência válida.");
+                    }
+
+                    // Iterate through each monster node
+                    foreach (YamlMappingNode cardNode in bodyNode)
+                    {
+                        if (!cardNode.Children.ContainsKey(new YamlScalarNode("Type")) ||
+                            cardNode["Type"]?.ToString() != "Card")
+                            continue;
+
+                        int idVal = 0;
+                        if (cardNode.Children.ContainsKey(new YamlScalarNode("Id")))
+                        {
+                            int.TryParse(cardNode["Id"]?.ToString(), out idVal);
+                        }
+
+                        var card = new Card
+                        {
+                            Id = idVal,
+                            Name = cardNode.Children.ContainsKey(new YamlScalarNode("Name"))
+                                ? cardNode["Name"]?.ToString()
+                                : string.Empty,
+                            AegisName = cardNode.Children.ContainsKey(new YamlScalarNode("AegisName"))
+                                ? cardNode["AegisName"]?.ToString()
+                                : string.Empty
+                        };
+
+                        // Add to dictionary
+                        if (!string.IsNullOrEmpty(card.AegisName))
+                        {
+                            if (cards.ContainsKey(card.AegisName))
+                                continue;
+                            cards[card.AegisName] = card;
+                        }
+                    }
+                }
+
+                return cards;
+            }
+            catch (Exception ex)
+            {
+                LogError("ParseCardYaml", ex);
+                throw;
+            }
         }
 
         private Dictionary<string, Items> ParseItemDBYaml()
@@ -343,344 +421,469 @@ namespace TipboxToDatabase
             for (int i = 0; i < filePaths.Length; i++)
             {
                 var filePath = filePaths[i];
-                var encoding = ansiChecks[i] ? Encoding.GetEncoding(1252) : Encoding.UTF8;
-
-                using (var reader = new StreamReader(filePath, encoding))
+                if (!File.Exists(filePath))
                 {
-                    var yamlStream = new YamlStream();
-                    yamlStream.Load(reader);
-
-                    // Access the root node
-                    var rootNode = (YamlMappingNode)yamlStream.Documents[0].RootNode;
-                    var bodyNode = (YamlSequenceNode)rootNode.Children[new YamlScalarNode("Body")];
-
-                    StatusText.Text = $"Reading {System.IO.Path.GetFileName(filePath)}";
-
-                    // Iterate through each item node
-                    foreach (YamlMappingNode itemNode in bodyNode)
-                    {
-                        var item = new Items
-                        {
-                            Id = itemNode.Children.ContainsKey(new YamlScalarNode("Id"))
-                                ? int.Parse(itemNode["Id"].ToString())
-                                : 0,
-                            Name = itemNode.Children.ContainsKey(new YamlScalarNode("Name"))
-                                ? itemNode["Name"]?.ToString()
-                                : string.Empty,
-                            AegisName = itemNode.Children.ContainsKey(new YamlScalarNode("AegisName"))
-                                ? itemNode["AegisName"]?.ToString()
-                                : string.Empty,
-                            Type = itemNode.Children.ContainsKey(new YamlScalarNode("Type"))
-                                ? itemNode["Type"]?.ToString()
-                                : string.Empty,
-                            SubType = itemNode.Children.ContainsKey(new YamlScalarNode("SubType"))
-                                ? itemNode["SubType"]?.ToString()
-                                : string.Empty,
-                            EquipLevelMin = itemNode.Children.ContainsKey(new YamlScalarNode("EquipLevelMin"))
-                                ? int.Parse(itemNode["EquipLevelMin"].ToString())
-                                : 0,
-                            Refinable = itemNode.Children.ContainsKey(new YamlScalarNode("Refinable")) && itemNode["Refinable"].ToString().ToLower() == "true"? 1 : 0,
-                            Gradeable = itemNode.Children.ContainsKey(new YamlScalarNode("Gradeable")) && itemNode["Gradeable"].ToString().ToLower() == "true"? 1 : 0
-                        };
-
-                        if (itemNode.Children.ContainsKey(new YamlScalarNode("Locations")))
-                        {
-                            var locNode = itemNode["Locations"] as YamlMappingNode;
-
-                            foreach (var loc in locNode.Children)
-                            {
-                                string locationName = loc.Key.ToString();
-                                bool value = bool.Parse(loc.Value.ToString());
-
-                                if (value && locationMap.TryGetValue(locationName, out int locId))
-                                {
-                                    item.Location = locId;
-                                    break; // pegamos a primeira localização válida
-                                }
-                            }
-                        }
-                        else
-                        {
-                            item.Location = -1; // sem localização
-                        }
-
-                        if (!string.IsNullOrEmpty(item.AegisName))
-                        {
-                            if (items.ContainsKey(item.AegisName))
-                                continue;
-                            items[item.AegisName] = item;
-                        }
-                    }
+                    throw new FileNotFoundException($"Arquivo de itens não encontrado: {filePath}");
                 }
             }
 
-            return items;
+            try
+            {
+                for (int i = 0; i < filePaths.Length; i++)
+                {
+                    var filePath = filePaths[i];
+                    var encoding = ansiChecks[i] ? Encoding.GetEncoding(1252) : Encoding.UTF8;
+
+                    using (var reader = new StreamReader(filePath, encoding))
+                    {
+                        var yamlStream = new YamlStream();
+                        yamlStream.Load(reader);
+
+                        if (yamlStream.Documents.Count == 0)
+                        {
+                            throw new InvalidDataException($"O arquivo YAML {System.IO.Path.GetFileName(filePath)} não possui documentos.");
+                        }
+
+                        // Access the root node
+                        var rootNode = yamlStream.Documents[0].RootNode as YamlMappingNode;
+                        if (rootNode == null)
+                        {
+                            throw new InvalidDataException($"O nó raiz do arquivo {System.IO.Path.GetFileName(filePath)} é inválido.");
+                        }
+
+                        var bodyKey = new YamlScalarNode("Body");
+                        if (!rootNode.Children.ContainsKey(bodyKey))
+                        {
+                            throw new InvalidDataException($"O nó 'Body' não foi encontrado no arquivo {System.IO.Path.GetFileName(filePath)}.");
+                        }
+
+                        var bodyNode = rootNode.Children[bodyKey] as YamlSequenceNode;
+                        if (bodyNode == null)
+                        {
+                            throw new InvalidDataException($"O nó 'Body' no arquivo {System.IO.Path.GetFileName(filePath)} não é uma sequência válida.");
+                        }
+
+                        StatusText.Text = $"Reading {System.IO.Path.GetFileName(filePath)}";
+
+                        // Iterate through each item node
+                        foreach (YamlMappingNode itemNode in bodyNode)
+                        {
+                            int idVal = 0;
+                            if (itemNode.Children.ContainsKey(new YamlScalarNode("Id")))
+                            {
+                                int.TryParse(itemNode["Id"]?.ToString(), out idVal);
+                            }
+
+                            int equipLevelMinVal = 0;
+                            if (itemNode.Children.ContainsKey(new YamlScalarNode("EquipLevelMin")))
+                            {
+                                int.TryParse(itemNode["EquipLevelMin"]?.ToString(), out equipLevelMinVal);
+                            }
+
+                            var item = new Items
+                            {
+                                Id = idVal,
+                                Name = itemNode.Children.ContainsKey(new YamlScalarNode("Name"))
+                                    ? itemNode["Name"]?.ToString()
+                                    : string.Empty,
+                                AegisName = itemNode.Children.ContainsKey(new YamlScalarNode("AegisName"))
+                                    ? itemNode["AegisName"]?.ToString()
+                                    : string.Empty,
+                                Type = itemNode.Children.ContainsKey(new YamlScalarNode("Type"))
+                                    ? itemNode["Type"]?.ToString()
+                                    : string.Empty,
+                                SubType = itemNode.Children.ContainsKey(new YamlScalarNode("SubType"))
+                                    ? itemNode["SubType"]?.ToString()
+                                    : string.Empty,
+                                EquipLevelMin = equipLevelMinVal,
+                                Refinable = itemNode.Children.ContainsKey(new YamlScalarNode("Refinable")) && itemNode["Refinable"].ToString().ToLower() == "true"? 1 : 0,
+                                Gradeable = itemNode.Children.ContainsKey(new YamlScalarNode("Gradeable")) && itemNode["Gradeable"].ToString().ToLower() == "true"? 1 : 0
+                            };
+
+                            if (itemNode.Children.ContainsKey(new YamlScalarNode("Locations")))
+                            {
+                                var locNode = itemNode["Locations"] as YamlMappingNode;
+                                if (locNode != null)
+                                {
+                                    foreach (var loc in locNode.Children)
+                                    {
+                                        string locationName = loc.Key.ToString();
+                                        bool value = false;
+                                        if (loc.Value != null)
+                                        {
+                                            bool.TryParse(loc.Value.ToString(), out value);
+                                        }
+
+                                        if (value && locationMap.TryGetValue(locationName, out int locId))
+                                        {
+                                            item.Location = locId;
+                                            break; // pegamos a primeira localização válida
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                item.Location = -1; // sem localização
+                            }
+
+                            if (!string.IsNullOrEmpty(item.AegisName))
+                            {
+                                if (items.ContainsKey(item.AegisName))
+                                    continue;
+                                items[item.AegisName] = item;
+                            }
+                        }
+                    }
+                }
+
+                return items;
+            }
+            catch (Exception ex)
+            {
+                LogError("ParseItemDBYaml", ex);
+                throw;
+            }
         }
 
         private Dictionary<int, Monster> ParseMonsterYaml(string filePath)
         {
-            var monsters = new Dictionary<int, Monster>();
-            Monster currentMonster = null;
-
-            // Ler todas as linhas do arquivo em uma lista
-            var lines = File.ReadAllLines(filePath, mobansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8);
-
-            for (int i = 0; i < lines.Length; i++)
+            if (!File.Exists(filePath))
             {
-                var line = lines[i].Trim(); // Limpar espaços em branco
-
-                // Ignorar linhas que começam com #
-                if (line.StartsWith("#"))
-                    continue;
-
-                // Verificar se a linha contém um novo monstro
-                if (line.StartsWith("- Id:"))
-                {
-                    // Se já houver um monstro atual, adicione-o ao dicionário
-                    if (currentMonster != null && currentMonster.Id != 0)
-                    {
-                        if (!monsters.ContainsKey(currentMonster.Id))
-                        {
-                            monsters.Add(currentMonster.Id, currentMonster);
-                        }
-                    }
-
-                    // Criar um novo objeto Monster
-                    currentMonster = new Monster();
-
-                    // Extrair o ID do monstro
-                    currentMonster.Id = int.Parse(line.Substring(line.IndexOf(':') + 1).Trim());
-                }
-                else if (currentMonster != null)
-                {
-                    // Processar outras propriedades
-                    if (line.StartsWith("AegisName:"))
-                    {
-                        currentMonster.AegisName = line.Substring(line.IndexOf(':') + 1).Trim();
-                    }
-                    else if (line.StartsWith("Name:"))
-                    {
-                        currentMonster.Name = line.Substring(line.IndexOf(':') + 1).Trim();
-                    }
-                    else if (line.StartsWith("Level:"))
-                    {
-                        currentMonster.Level = int.Parse(line.Substring(line.IndexOf(':') + 1).Trim());
-                    }
-                    else if (line.StartsWith("Hp:"))
-                    {
-                        currentMonster.Hp = int.Parse(line.Substring(line.IndexOf(':') + 1).Trim());
-                    }
-                    else if (line.StartsWith("Attack:"))
-                    {
-                        currentMonster.Attack = int.Parse(line.Substring(line.IndexOf(':') + 1).Trim());
-                    }
-                    else if (line.StartsWith("Defense:"))
-                    {
-                        currentMonster.Defense = int.Parse(line.Substring(line.IndexOf(':') + 1).Trim());
-                    }
-                    else if (line.StartsWith("MagicDefense:"))
-                    {
-                        currentMonster.MagicDefense = int.Parse(line.Substring(line.IndexOf(':') + 1).Trim());
-                    }
-                    else if (line.StartsWith("Str:"))
-                    {
-                        currentMonster.Str = int.Parse(line.Substring(line.IndexOf(':') + 1).Trim());
-                    }
-                    else if (line.StartsWith("Agi:"))
-                    {
-                        currentMonster.Agi = int.Parse(line.Substring(line.IndexOf(':') + 1).Trim());
-                    }
-                    else if (line.StartsWith("Vit:"))
-                    {
-                        currentMonster.Vit = int.Parse(line.Substring(line.IndexOf(':') + 1).Trim());
-                    }
-                    else if (line.StartsWith("Int:"))
-                    {
-                        currentMonster.Int = int.Parse(line.Substring(line.IndexOf(':') + 1).Trim());
-                    }
-                    else if (line.StartsWith("Dex:"))
-                    {
-                        currentMonster.Dex = int.Parse(line.Substring(line.IndexOf(':') + 1).Trim());
-                    }
-                    else if (line.StartsWith("Luk:"))
-                    {
-                        currentMonster.Luk = int.Parse(line.Substring(line.IndexOf(':') + 1).Trim());
-                    }
-                    else if (line.StartsWith("Size:"))
-                    {
-                        currentMonster.Size = line.Substring(line.IndexOf(':') + 1).Trim();
-                    }
-                    else if (line.StartsWith("Race:"))
-                    {
-                        currentMonster.Race = line.Substring(line.IndexOf(':') + 1).Trim();
-                    }
-                    else if (line.StartsWith("Element:"))
-                    {
-                        currentMonster.Element = line.Substring(line.IndexOf(':') + 1).Trim();
-                    }
-                    else if (line.StartsWith("MvpDrops:"))
-                    {
-                        // Iniciar a leitura dos drops
-                        i++; // Avança para a próxima linha
-                        while (i < lines.Length && !lines[i].Trim().StartsWith("Drops:")) // Enquanto não encontrar um novo monstro
-                        {
-                            line = lines[i].Trim();
-
-                            // Se a linha não estiver vazia e começar com um item
-                            if (!string.IsNullOrWhiteSpace(line) && line.StartsWith("- Item:"))
-                            {
-                                var drop = new Drop
-                                {
-                                    AegisName = line.Substring(line.IndexOf(':') + 1).Trim(),
-                                    StealProtected = false // Valor padrão
-                                };
-
-                                // Adicionar o drop ao monstro
-                                currentMonster.MvpDrops.Add(drop);
-                            }
-                            else if (!string.IsNullOrWhiteSpace(line) && line.StartsWith("Rate:"))
-                            {
-                                currentMonster.MvpDrops[currentMonster.MvpDrops.Count - 1].Rate = int.Parse(line.Substring(line.IndexOf(':') + 1).Trim());
-                            }
-
-                            // Apenas avança se não ultrapassar os limites
-                            if (i + 1 < lines.Length)
-                            {
-                                i++; // Avança para a próxima linha
-                            }
-                            else
-                            {
-                                break; // Sai do loop se chegar ao fim do arquivo
-                            }
-                        }
-
-                        // Ajuste para o loop principal não pular a próxima linha
-                        i--;
-                    }
-                    else if (line.StartsWith("Drops:"))
-                    {
-                        // Iniciar a leitura dos drops
-                        i++; // Avança para a próxima linha
-                        while (i < lines.Length && !lines[i].Trim().StartsWith("- Id:")) // Enquanto não encontrar um novo monstro
-                        {
-                            line = lines[i].Trim();
-
-                            // Se a linha não estiver vazia e começar com um item
-                            if (!string.IsNullOrWhiteSpace(line) && line.StartsWith("- Item:"))
-                            {
-                                var drop = new Drop
-                                {
-                                    AegisName = line.Substring(line.IndexOf(':') + 1).Trim(),
-                                    StealProtected = false // Valor padrão
-                                };
-
-                                // Adicionar o drop ao monstro
-                                currentMonster.Drops.Add(drop);
-                            }
-                            else if (!string.IsNullOrWhiteSpace(line) && line.StartsWith("Rate:"))
-                            {
-                                currentMonster.Drops[currentMonster.Drops.Count - 1].Rate = int.Parse(line.Substring(line.IndexOf(':') + 1).Trim());
-                            }
-
-                            // Apenas avança se não ultrapassar os limites
-                            if (i + 1 < lines.Length)
-                            {
-                                i++; // Avança para a próxima linha
-                            }
-                            else
-                            {
-                                break; // Sai do loop se chegar ao fim do arquivo
-                            }
-                        }
-
-                        // Ajuste para o loop principal não pular a próxima linha
-                        i--;
-                    }
-                }
+                throw new FileNotFoundException($"Arquivo de monstros não encontrado: {filePath}");
             }
 
-            // Adiciona o último monstro lido
-            if (currentMonster != null && currentMonster.Id != 0)
+            try
             {
-                if (!monsters.ContainsKey(currentMonster.Id))
-                {
-                    monsters.Add(currentMonster.Id, currentMonster);
-                }
-            }
+                var monsters = new Dictionary<int, Monster>();
+                Monster currentMonster = null;
 
-            return monsters;
+                // Ler todas as linhas do arquivo em uma lista
+                var lines = File.ReadAllLines(filePath, mobansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8);
+
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    var line = lines[i].Trim(); // Limpar espaços em branco
+
+                    // Ignorar linhas que começam com #
+                    if (line.StartsWith("#"))
+                        continue;
+
+                    // Verificar se a linha contém um novo monstro
+                    if (line.StartsWith("- Id:"))
+                    {
+                        // Se já houver um monstro atual, adicione-o ao dicionário
+                        if (currentMonster != null && currentMonster.Id != 0)
+                        {
+                            if (!monsters.ContainsKey(currentMonster.Id))
+                            {
+                                monsters.Add(currentMonster.Id, currentMonster);
+                            }
+                        }
+
+                        // Criar um novo objeto Monster
+                        currentMonster = new Monster();
+
+                        // Extrair o ID do monstro
+                        int idVal = 0;
+                        int.TryParse(line.Substring(line.IndexOf(':') + 1).Trim(), out idVal);
+                        currentMonster.Id = idVal;
+                    }
+                    else if (currentMonster != null)
+                    {
+                        // Processar outras propriedades
+                        if (line.StartsWith("AegisName:"))
+                        {
+                            currentMonster.AegisName = line.Substring(line.IndexOf(':') + 1).Trim();
+                        }
+                        else if (line.StartsWith("Name:"))
+                        {
+                            currentMonster.Name = line.Substring(line.IndexOf(':') + 1).Trim();
+                        }
+                        else if (line.StartsWith("Level:"))
+                        {
+                            int val = 0;
+                            int.TryParse(line.Substring(line.IndexOf(':') + 1).Trim(), out val);
+                            currentMonster.Level = val;
+                        }
+                        else if (line.StartsWith("Hp:"))
+                        {
+                            int val = 0;
+                            int.TryParse(line.Substring(line.IndexOf(':') + 1).Trim(), out val);
+                            currentMonster.Hp = val;
+                        }
+                        else if (line.StartsWith("Attack:"))
+                        {
+                            int val = 0;
+                            int.TryParse(line.Substring(line.IndexOf(':') + 1).Trim(), out val);
+                            currentMonster.Attack = val;
+                        }
+                        else if (line.StartsWith("Defense:"))
+                        {
+                            int val = 0;
+                            int.TryParse(line.Substring(line.IndexOf(':') + 1).Trim(), out val);
+                            currentMonster.Defense = val;
+                        }
+                        else if (line.StartsWith("MagicDefense:"))
+                        {
+                            int val = 0;
+                            int.TryParse(line.Substring(line.IndexOf(':') + 1).Trim(), out val);
+                            currentMonster.MagicDefense = val;
+                        }
+                        else if (line.StartsWith("Str:"))
+                        {
+                            int val = 0;
+                            int.TryParse(line.Substring(line.IndexOf(':') + 1).Trim(), out val);
+                            currentMonster.Str = val;
+                        }
+                        else if (line.StartsWith("Agi:"))
+                        {
+                            int val = 0;
+                            int.TryParse(line.Substring(line.IndexOf(':') + 1).Trim(), out val);
+                            currentMonster.Agi = val;
+                        }
+                        else if (line.StartsWith("Vit:"))
+                        {
+                            int val = 0;
+                            int.TryParse(line.Substring(line.IndexOf(':') + 1).Trim(), out val);
+                            currentMonster.Vit = val;
+                        }
+                        else if (line.StartsWith("Int:"))
+                        {
+                            int val = 0;
+                            int.TryParse(line.Substring(line.IndexOf(':') + 1).Trim(), out val);
+                            currentMonster.Int = val;
+                        }
+                        else if (line.StartsWith("Dex:"))
+                        {
+                            int val = 0;
+                            int.TryParse(line.Substring(line.IndexOf(':') + 1).Trim(), out val);
+                            currentMonster.Dex = val;
+                        }
+                        else if (line.StartsWith("Luk:"))
+                        {
+                            int val = 0;
+                            int.TryParse(line.Substring(line.IndexOf(':') + 1).Trim(), out val);
+                            currentMonster.Luk = val;
+                        }
+                        else if (line.StartsWith("Size:"))
+                        {
+                            currentMonster.Size = line.Substring(line.IndexOf(':') + 1).Trim();
+                        }
+                        else if (line.StartsWith("Race:"))
+                        {
+                            currentMonster.Race = line.Substring(line.IndexOf(':') + 1).Trim();
+                        }
+                        else if (line.StartsWith("Element:"))
+                        {
+                            currentMonster.Element = line.Substring(line.IndexOf(':') + 1).Trim();
+                        }
+                        else if (line.StartsWith("MvpDrops:"))
+                        {
+                            // Iniciar a leitura dos drops
+                            i++; // Avança para a próxima linha
+                            while (i < lines.Length && !lines[i].Trim().StartsWith("Drops:")) // Enquanto não encontrar um novo monstro
+                            {
+                                line = lines[i].Trim();
+
+                                // Se a linha não estiver vazia e começar com um item
+                                if (!string.IsNullOrWhiteSpace(line) && line.StartsWith("- Item:"))
+                                {
+                                    var drop = new Drop
+                                    {
+                                        AegisName = line.Substring(line.IndexOf(':') + 1).Trim(),
+                                        StealProtected = false // Valor padrão
+                                    };
+
+                                    // Adicionar o drop ao monstro
+                                    currentMonster.MvpDrops.Add(drop);
+                                }
+                                else if (!string.IsNullOrWhiteSpace(line) && line.StartsWith("Rate:"))
+                                {
+                                    if (currentMonster.MvpDrops.Count > 0)
+                                    {
+                                        int rateVal = 0;
+                                        int.TryParse(line.Substring(line.IndexOf(':') + 1).Trim(), out rateVal);
+                                        currentMonster.MvpDrops[currentMonster.MvpDrops.Count - 1].Rate = rateVal;
+                                    }
+                                }
+
+                                // Apenas avança se não ultrapassar os limites
+                                if (i + 1 < lines.Length)
+                                {
+                                    i++; // Avança para a próxima linha
+                                }
+                                else
+                                {
+                                    break; // Sai do loop se chegar ao fim do arquivo
+                                }
+                            }
+
+                            // Ajuste para o loop principal não pular a próxima linha
+                            i--;
+                        }
+                        else if (line.StartsWith("Drops:"))
+                        {
+                            // Iniciar a leitura dos drops
+                            i++; // Avança para a próxima linha
+                            while (i < lines.Length && !lines[i].Trim().StartsWith("- Id:")) // Enquanto não encontrar um novo monstro
+                            {
+                                line = lines[i].Trim();
+
+                                // Se a linha não estiver vazia e começar com um item
+                                if (!string.IsNullOrWhiteSpace(line) && line.StartsWith("- Item:"))
+                                {
+                                    var drop = new Drop
+                                    {
+                                        AegisName = line.Substring(line.IndexOf(':') + 1).Trim(),
+                                        StealProtected = false // Valor padrão
+                                    };
+
+                                    // Adicionar o drop ao monstro
+                                    currentMonster.Drops.Add(drop);
+                                }
+                                else if (!string.IsNullOrWhiteSpace(line) && line.StartsWith("Rate:"))
+                                {
+                                    if (currentMonster.Drops.Count > 0)
+                                    {
+                                        int rateVal = 0;
+                                        int.TryParse(line.Substring(line.IndexOf(':') + 1).Trim(), out rateVal);
+                                        currentMonster.Drops[currentMonster.Drops.Count - 1].Rate = rateVal;
+                                    }
+                                }
+
+                                // Apenas avança se não ultrapassar os limites
+                                if (i + 1 < lines.Length)
+                                {
+                                    i++; // Avança para a próxima linha
+                                }
+                                else
+                                {
+                                    break; // Sai do loop se chegar ao fim do arquivo
+                                }
+                            }
+
+                            // Ajuste para o loop principal não pular a próxima linha
+                            i--;
+                        }
+                    }
+                }
+
+                // Adiciona o último monstro lido
+                if (currentMonster != null && currentMonster.Id != 0)
+                {
+                    if (!monsters.ContainsKey(currentMonster.Id))
+                    {
+                        monsters.Add(currentMonster.Id, currentMonster);
+                    }
+                }
+
+                return monsters;
+            }
+            catch (Exception ex)
+            {
+                LogError("ParseMonsterYaml", ex);
+                throw;
+            }
         }
 
         private Dictionary<int, string> ParseNum2CardFile(string filePath)
         {
-            var data = new Dictionary<int, string>();
-            var lines = File.ReadAllLines(filePath, nun2ansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8);
-
-            foreach (var line in lines)
+            if (!File.Exists(filePath))
             {
-                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("//")) continue;
-                var parts = line.Split('#');
-                if (parts.Length >= 3 && int.TryParse(parts[0], out int id))
-                {
-                    data[id] = parts[1];
-                }
+                throw new FileNotFoundException($"Arquivo Num2Card não encontrado: {filePath}");
             }
 
-            return data;
+            try
+            {
+                var data = new Dictionary<int, string>();
+                var lines = File.ReadAllLines(filePath, nun2ansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8);
+
+                foreach (var line in lines)
+                {
+                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith("//")) continue;
+                    var parts = line.Split('#');
+                    if (parts.Length >= 3 && int.TryParse(parts[0], out int id))
+                    {
+                        data[id] = parts[1];
+                    }
+                }
+
+                return data;
+            }
+            catch (Exception ex)
+            {
+                LogError("ParseNum2CardFile", ex);
+                throw;
+            }
         }
 
         private Dictionary<int, (string Title, string Resource, List<string> Description)> ParseItemInfoFile(string filePaths)
         {
-            var data = new Dictionary<int, (string, string, List<string>)>();
-            string[] paths = filePaths.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (var filePath in paths)
+            try
             {
-                if (!File.Exists(filePath)) continue;
+                var data = new Dictionary<int, (string, string, List<string>)>();
+                string[] paths = filePaths.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
 
-                var content = File.ReadAllText(filePath, iiansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8);
-
-                // Updated regex to match items with nested braces
-                var itemPattern = new Regex(@"\[(\d+)]\s*=\s*\{((?:[^{}]*\{[^{}]*\})*[^{}]*)\}", RegexOptions.Singleline);
-
-                foreach (Match match in itemPattern.Matches(content))
+                foreach (var filePath in paths)
                 {
-                    int id = int.Parse(match.Groups[1].Value); // Extract the item ID
-                    if (data.ContainsKey(id))
-                        continue;
-
-                    string itemData = match.Groups[2].Value;  // Extract the entire item data block
-
-                    // Extract `identifiedDisplayName`
-                    var titleMatch = Regex.Match(itemData, @"\tidentifiedDisplayName\s*=\s*""(.*?)""");
-                    string title = titleMatch.Success ? titleMatch.Groups[1].Value : string.Empty;
-
-                    // Extract `identifiedResourceName`
-                    var resourceMatch = Regex.Match(itemData, @"\tidentifiedResourceName\s*=\s*""(.*?)""");
-                    string resource = resourceMatch.Success ? resourceMatch.Groups[1].Value : string.Empty;
-
-                    // Extract `identifiedDescriptionName`
-                    var descriptionMatch = Regex.Match(itemData, @"\tidentifiedDescriptionName\s*=\s*\{(.*?)\}", RegexOptions.Singleline);
-                    string descriptionBlock = descriptionMatch.Success ? descriptionMatch.Groups[1].Value : string.Empty;
-
-                    var descriptions = new List<string>();
-                    if (!string.IsNullOrEmpty(descriptionBlock))
+                    if (!File.Exists(filePath))
                     {
-                        // Split and clean each description line
-                        foreach (var desc in descriptionBlock.Split(new[] { "\r", "\n", "," }, StringSplitOptions.RemoveEmptyEntries))
-                        {
-                            string trimmed = desc.Trim(' ', '"', '\t').Replace("\\", "").Replace("\\\"", "\""); // Handle escaped quotes
-                            if (!string.IsNullOrEmpty(trimmed))
-                                descriptions.Add(trimmed);
-                        }
+                        throw new FileNotFoundException($"Arquivo ItemInfo não encontrado: {filePath}");
                     }
 
-                    // Add the parsed data to the dictionary
-                    data[id] = (title, resource, descriptions);
-                }
-            }
+                    var content = File.ReadAllText(filePath, iiansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8);
 
-            return data;
+                    // Updated regex to match items with nested braces
+                    var itemPattern = new Regex(@"\[(\d+)]\s*=\s*\{((?:[^{}]*\{[^{}]*\})*[^{}]*)\}", RegexOptions.Singleline);
+
+                    foreach (Match match in itemPattern.Matches(content))
+                    {
+                        int id = 0;
+                        if (!int.TryParse(match.Groups[1].Value, out id))
+                            continue; // Ignora se o ID falhar no parse
+
+                        if (data.ContainsKey(id))
+                            continue;
+
+                        string itemData = match.Groups[2].Value;  // Extract the entire item data block
+
+                        // Extract `identifiedDisplayName`
+                        var titleMatch = Regex.Match(itemData, @"\tidentifiedDisplayName\s*=\s*""(.*?)""");
+                        string title = titleMatch.Success ? titleMatch.Groups[1].Value : string.Empty;
+
+                        // Extract `identifiedResourceName`
+                        var resourceMatch = Regex.Match(itemData, @"\tidentifiedResourceName\s*=\s*""(.*?)""");
+                        string resource = resourceMatch.Success ? resourceMatch.Groups[1].Value : string.Empty;
+
+                        // Extract `identifiedDescriptionName`
+                        var descriptionMatch = Regex.Match(itemData, @"\tidentifiedDescriptionName\s*=\s*\{(.*?)\}", RegexOptions.Singleline);
+                        string descriptionBlock = descriptionMatch.Success ? descriptionMatch.Groups[1].Value : string.Empty;
+
+                        var descriptions = new List<string>();
+                        if (!string.IsNullOrEmpty(descriptionBlock))
+                        {
+                            // Split and clean each description line
+                            foreach (var desc in descriptionBlock.Split(new[] { "\r", "\n", "," }, StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                string trimmed = desc.Trim(' ', '"', '\t').Replace("\\", "").Replace("\\\"", "\""); // Handle escaped quotes
+                                if (!string.IsNullOrEmpty(trimmed))
+                                    descriptions.Add(trimmed);
+                            }
+                        }
+
+                        // Add the parsed data to the dictionary
+                        data[id] = (title, resource, descriptions);
+                    }
+                }
+
+                return data;
+            }
+            catch (Exception ex)
+            {
+                LogError("ParseItemInfoFile", ex);
+                throw;
+            }
         }
 
         private void WriteEndTipbox(StreamWriter writer)
@@ -741,339 +944,375 @@ namespace TipboxToDatabase
 
         private Dictionary<int, Dictionary<string, int>> ParseMobsFromFolder(string folderPath)
         {
-            var mobDictionary = new Dictionary<int, Dictionary<string, int>>();
-
             if (!Directory.Exists(folderPath))
             {
-                throw new DirectoryNotFoundException("A pasta especificada não foi encontrada.");
+                throw new DirectoryNotFoundException($"A pasta especificada não foi encontrada: {folderPath}");
             }
 
-            var txtFiles = Directory.GetFiles(folderPath, "*.txt", SearchOption.AllDirectories);
-
-            foreach (var file in txtFiles)
+            try
             {
-                var lines = File.ReadAllLines(file);
+                var mobDictionary = new Dictionary<int, Dictionary<string, int>>();
+                var txtFiles = Directory.GetFiles(folderPath, "*.txt", SearchOption.AllDirectories);
 
-                foreach (var line in lines)
+                foreach (var file in txtFiles)
                 {
-                    // Ignorar linhas de comentários ou linhas vazias
-                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith("//") || line.StartsWith("#"))
+                    var lines = File.ReadAllLines(file);
+
+                    foreach (var line in lines)
                     {
-                        continue;
-                    }
-
-                    // Regex para capturar os dados
-                    var match = Regex.Match(line,
-                        @"^(?<map>\S+)(?:,(?<x>\d+)(?:,(?<y>\d+)(?:,(?<xs>\d+)(?:,(?<ys>\d+))?)?)?)?\s+(?<type>monster|bossmonster)\s+(?<name>[^\t]+)\s+(?<id>\d+),(?<amount>\d+)",
-                        RegexOptions.IgnoreCase);
-
-                    if (match.Success)
-                    {
-                        string map = match.Groups["map"].Value;
-                        var temp = map.Split(',');
-                        map = temp[0];
-                        int id = int.Parse(match.Groups["id"].Value);
-                        int amount = int.Parse(match.Groups["amount"].Value);
-
-                        if (!mobDictionary.ContainsKey(id))
+                        // Ignorar linhas de comentários ou linhas vazias
+                        if (string.IsNullOrWhiteSpace(line) || line.StartsWith("//") || line.StartsWith("#"))
                         {
-                            mobDictionary[id] = new Dictionary<string, int>();
+                            continue;
                         }
 
-                        if (!mobDictionary[id].ContainsKey(map))
-                        {
-                            mobDictionary[id][map] = 0;
-                        }
+                        // Regex para capturar os dados
+                        var match = Regex.Match(line,
+                            @"^(?<map>\S+)(?:,(?<x>\d+)(?:,(?<y>\d+)(?:,(?<xs>\d+)(?:,(?<ys>\d+))?)?)?)?\s+(?<type>monster|bossmonster)\s+(?<name>[^\t]+)\s+(?<id>\d+),(?<amount>\d+)",
+                            RegexOptions.IgnoreCase);
 
-                        mobDictionary[id][map] += amount;
+                        if (match.Success)
+                        {
+                            string map = match.Groups["map"].Value;
+                            var temp = map.Split(',');
+                            map = temp[0];
+
+                            int id = 0;
+                            int.TryParse(match.Groups["id"].Value, out id);
+
+                            int amount = 0;
+                            int.TryParse(match.Groups["amount"].Value, out amount);
+
+                            if (!mobDictionary.ContainsKey(id))
+                            {
+                                mobDictionary[id] = new Dictionary<string, int>();
+                            }
+
+                            if (!mobDictionary[id].ContainsKey(map))
+                            {
+                                mobDictionary[id][map] = 0;
+                            }
+
+                            mobDictionary[id][map] += amount;
+                        }
                     }
                 }
-            }
 
-            return mobDictionary;
+                return mobDictionary;
+            }
+            catch (Exception ex)
+            {
+                LogError("ParseMobsFromFolder", ex);
+                throw;
+            }
         }
 
         private Dictionary<int, TipBoxInfo> GenerateTipboxFile(Dictionary<int, string> num2CardData, Dictionary<int, (string Title, string Resource, List<string> Description)> itemInfoData, Dictionary<string, Card> carddb, Dictionary<int, Monster> mobdb, Dictionary<string, Items> itemdb, Dictionary<int, Dictionary<string, int>> spawnData)
         {
-            Dictionary<int, TipBoxInfo> TipBoxDB = new Dictionary<int, TipBoxInfo>();
-            foreach (var id in mobdb.Keys)
+            try
             {
-                if (mobdb.TryGetValue(id, out var mobinfo))
+                Dictionary<int, TipBoxInfo> TipBoxDB = new Dictionary<int, TipBoxInfo>();
+                foreach (var id in mobdb.Keys)
                 {
-                    foreach (var drop in mobinfo.Drops)
+                    if (mobdb.TryGetValue(id, out var mobinfo))
                     {
-                        if (carddb.TryGetValue(drop.AegisName, out var thiscard))
+                        foreach (var drop in mobinfo.Drops)
                         {
-                            if (num2CardData.TryGetValue(thiscard.Id, out var cinfo))
+                            if (carddb.TryGetValue(drop.AegisName, out var thiscard))
+                            {
+                                if (num2CardData.TryGetValue(thiscard.Id, out var cinfo))
+                                {
+                                    foreach (var mob in spawnData)
+                                    {
+                                        if (mob.Key == mobinfo.Id)
+                                        {
+                                            TipBoxInfo Info = new TipBoxInfo();
+                                            string page = string.Empty;
+                                            page += $"Id: {mobinfo.Id}\\nName: {mobinfo.Name}\\nLevel: {mobinfo.Level}\\nHp: {mobinfo.Hp}\\nAttack: {mobinfo.Attack}\\nDefense: {mobinfo.Defense}\\nMagicDefense: {mobinfo.MagicDefense}\\nResistence: {mobinfo.Resistence}\\nMagicResistence: {mobinfo.Level}\\nStr: {mobinfo.Str}\\nVit: {mobinfo.Vit}\\nAgi: {mobinfo.Agi}\\nInt: {mobinfo.Int}\\nDex: {mobinfo.Dex}\\nLuk: {mobinfo.Luk}\\nSize: {mobinfo.Size}\\nRace: {mobinfo.Race}\\nElement: {mobinfo.Element}";
+                                            if (mobinfo.MvpDrops.Count > 0)
+                                            {
+                                                page += $"\\nMVPDrops:";
+                                                foreach (var d in mobinfo.MvpDrops)
+                                                {
+                                                    if (itemdb.TryGetValue(d.AegisName, out var it))
+                                                    {
+                                                        string dropdisplay = $"<ITEM>{it.Name}<INFO>{it.Id}</INFO></ITEM>";
+                                                        page += $"\\n{dropdisplay}  - {d.Rate / 100.0:F2}%";
+                                                    }
+                                                }
+                                            }
+                                            if (mobinfo.Drops.Count > 0)
+                                            {
+                                                page += $"\\nDrops:";
+                                                foreach (var d in mobinfo.Drops)
+                                                {
+                                                    if (itemdb.TryGetValue(d.AegisName, out var it))
+                                                    {
+                                                        string dropdisplay = $"<ITEM>{it.Name} [{it.Id}]<INFO>{it.Id}</INFO></ITEM>";
+                                                        page += $"\\n - {dropdisplay}  - {d.Rate / 100.0:F2}%";
+                                                    }
+                                                }
+                                            }
+
+                                            page += "\\nCan be found on:";
+                                            foreach (var mapData in mob.Value)
+                                            {
+                                                page += $"\\n<NAVI>Map: {mapData.Key}, Amount: {mapData.Value}<INFO>{mapData.Key},0,0,0,000,0</INFO></NAVI>";
+                                            }
+
+                                            Info.Id = id;
+                                            Info.Title = $"{mobinfo.Name} [{mobinfo.Id}]";
+                                            Info.Image = $"À¯ÀúÀÎÅÍÆäÀÌ½º\\\\cardbmp\\\\{cinfo}";
+                                            Info.Size = 100;
+                                            Info.Page = page;
+                                            Info.Type = dbTypes.MOB;
+                                            TipBoxDB[id] = Info;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                int count = 1;
+
+                foreach (var id in itemInfoData.Keys)
+                {
+                    while (TipBoxDB.ContainsKey(count))
+                        count++;
+                    TipBoxInfo Info = new TipBoxInfo();
+                    if (itemInfoData.TryGetValue(id, out var itemInfo))
+                    {
+                        if (dropable_only.IsChecked == true)
+                        {
+                            bool isDropable = mobdb.Values.Any(mob => mob.Drops.Any(drop => itemdb.TryGetValue(drop.AegisName, out var it) && it.Id == id));
+                            if (!isDropable)
+                                continue;
+                        }
+
+                        Info.Id = id;
+                        Info.Title = $"{itemInfo.Title} [{id}]";
+                        if (num2CardData.TryGetValue(id, out var cardinfo))
+                        {
+                            Info.Type = dbTypes.CARD;
+                            Info.Image = $"À¯ÀúÀÎÅÍÆäÀÌ½º\\\\cardbmp\\\\{num2CardData[id]}";
+                            Info.Size = 100;
+                        }
+                        else
+                        {
+                            Info.Type = dbTypes.ITEM;
+                            Info.Image = $"À¯ÀúÀÎÅÍÆäÀÌ½º\\\\collection\\\\{itemInfo.Resource}";
+                            Info.Size = 200;
+                        }
+                        Info.Page = $"ItemID:[{id}]\\n_______________________\\n{string.Join("\\n", itemInfo.Description.Select(d => d.Replace("\n", "\\n").Replace("\r", "").Replace("\"", "").Trim()))}";
+                        bool is_dropped = false;
+                        Parallel.ForEach(mobdb.Keys, mobid =>
+                        {
+                            if (mobdb.TryGetValue(mobid, out var mobinfo))
                             {
                                 foreach (var mob in spawnData)
                                 {
                                     if (mob.Key == mobinfo.Id)
                                     {
-                                        TipBoxInfo Info = new TipBoxInfo();
-                                        string page = string.Empty;
-                                        page += $"Id: {mobinfo.Id}\\nName: {mobinfo.Name}\\nLevel: {mobinfo.Level}\\nHp: {mobinfo.Hp}\\nAttack: {mobinfo.Attack}\\nDefense: {mobinfo.Defense}\\nMagicDefense: {mobinfo.MagicDefense}\\nResistence: {mobinfo.Resistence}\\nMagicResistence: {mobinfo.Level}\\nStr: {mobinfo.Str}\\nVit: {mobinfo.Vit}\\nAgi: {mobinfo.Agi}\\nInt: {mobinfo.Int}\\nDex: {mobinfo.Dex}\\nLuk: {mobinfo.Luk}\\nSize: {mobinfo.Size}\\nRace: {mobinfo.Race}\\nElement: {mobinfo.Element}";
-                                        if (mobinfo.MvpDrops.Count > 0)
-                                        {
-                                            page += $"\\nMVPDrops:";
-                                            foreach (var d in mobinfo.MvpDrops)
-                                            {
-                                                if (itemdb.TryGetValue(d.AegisName, out var it))
-                                                {
-                                                    string dropdisplay = $"<ITEM>{it.Name}<INFO>{it.Id}</INFO></ITEM>";
-                                                    page += $"\\n{dropdisplay}  - {d.Rate / 100.0:F2}%";
-                                                }
-                                            }
-                                        }
                                         if (mobinfo.Drops.Count > 0)
                                         {
-                                            page += $"\\nDrops:";
-                                            foreach (var d in mobinfo.Drops)
+                                            foreach (var d in mobinfo.Drops) // Inner loop doesn't need parallelization
                                             {
                                                 if (itemdb.TryGetValue(d.AegisName, out var it))
                                                 {
-                                                    string dropdisplay = $"<ITEM>{it.Name} [{it.Id}]<INFO>{it.Id}</INFO></ITEM>";
-                                                    page += $"\\n - {dropdisplay}  - {d.Rate / 100.0:F2}%";
-                                                }
-                                            }
-                                        }
+                                                    if (it.Id != id)
+                                                        continue;
 
-                                        page += "\\nCan be found on:";
-                                        foreach (var mapData in mob.Value)
-                                        {
-                                            page += $"\\n<NAVI>Map: {mapData.Key}, Amount: {mapData.Value}<INFO>{mapData.Key},0,0,0,000,0</INFO></NAVI>";
-                                        }
-
-                                        Info.Id = id;
-                                        Info.Title = $"{mobinfo.Name} [{mobinfo.Id}]";
-                                        Info.Image = $"À¯ÀúÀÎÅÍÆäÀÌ½º\\\\cardbmp\\\\{cinfo}";
-                                        Info.Size = 100;
-                                        Info.Page = page;
-                                        Info.Type = dbTypes.MOB;
-                                        TipBoxDB[id] = Info;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            int count = 1;
-
-            foreach (var id in itemInfoData.Keys)
-            {
-                while (TipBoxDB.TryGetValue(count, out var tbdb))
-                    count++;
-                TipBoxInfo Info = new TipBoxInfo();
-                if (itemInfoData.TryGetValue(id, out var itemInfo))
-                {
-                    if (dropable_only.IsChecked == true)
-                    {
-                        bool isDropable = mobdb.Values.Any(mob => mob.Drops.Any(drop => itemdb.TryGetValue(drop.AegisName, out var it) && it.Id == id));
-                        if (!isDropable)
-                            continue;
-                    }
-
-                    Info.Id = id;
-                    Info.Title = $"{itemInfo.Title} [{id}]";
-                    if (num2CardData.TryGetValue(id, out var cardinfo))
-                    {
-                        Info.Type = dbTypes.CARD;
-                        Info.Image = $"À¯ÀúÀÎÅÍÆäÀÌ½º\\\\cardbmp\\\\{num2CardData[id]}";
-                        Info.Size = 100;
-                    }
-                    else
-                    {
-                        Info.Type = dbTypes.ITEM;
-                        Info.Image = $"À¯ÀúÀÎÅÍÆäÀÌ½º\\\\collection\\\\{itemInfo.Resource}";
-                        Info.Size = 200;
-                    }
-                    Info.Page = $"ItemID:[{id}]\\n_______________________\\n{string.Join("\\n", itemInfo.Description.Select(d => d.Replace("\n", "\\n").Replace("\r", "").Replace("\"", "").Trim()))}";
-                    bool is_dropped = false;
-                    Parallel.ForEach(mobdb.Keys, mobid =>
-                    {
-                        if (mobdb.TryGetValue(mobid, out var mobinfo))
-                        {
-                            foreach (var mob in spawnData)
-                            {
-                                if (mob.Key == mobinfo.Id)
-                                {
-                                    if (mobinfo.Drops.Count > 0)
-                                    {
-                                        foreach (var d in mobinfo.Drops) // Inner loop doesn't need parallelization
-                                        {
-                                            if (itemdb.TryGetValue(d.AegisName, out var it))
-                                            {
-                                                if (it.Id != id)
-                                                    continue;
-
-                                                lock (Info) // Synchronize access to shared resource
-                                                {
-                                                    if (!is_dropped)
+                                                    lock (Info) // Synchronize access to shared resource
                                                     {
-                                                        is_dropped = true;
-                                                        Info.Page += $"\\nMonster drops:";
+                                                        if (!is_dropped)
+                                                        {
+                                                            is_dropped = true;
+                                                            Info.Page += $"\\nMonster drops:";
+                                                        }
+                                                        Info.Page += $"\\n<TIPBOX>{mobinfo.Name}<INFO>{mobinfo.Id}</INFO></TIPBOX>";
                                                     }
-                                                    Info.Page += $"\\n<TIPBOX>{mobinfo.Name}<INFO>{mobinfo.Id}</INFO></TIPBOX>";
                                                 }
                                             }
                                         }
                                     }
+                                    break;
                                 }
-                                break;
                             }
-                        }
-                    });
+                        });
 
-                    TipBoxDB[count] = Info;
-                    count++;
-                }
-            }
-
-            using (var writer = new StreamWriter("tipbox.lub", false, tipansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8))
-            {
-                writer.WriteLine("tbl = {");
-
-                // Sort the dictionary by ID (keys)
-                var sortedKeys = TipBoxDB.Keys.OrderBy(id => id).ToList();
-
-                var lastKey = sortedKeys.Last();
-                string buffer = string.Empty;
-                foreach (var id in sortedKeys)
-                {
-                    if (TipBoxDB.TryGetValue(id, out var tipInfo))
-                    {
-                        writer.WriteLine($"\t[{id}] = {{");
-                        writer.WriteLine($"\t\tTitle = \"{tipInfo.Title}\",");
-                        writer.WriteLine("\t\tSearch = 1,");
-                        writer.WriteLine($"\t\tImage = \"{tipInfo.Image}\",");
-                        writer.WriteLine($"\t\tImgcoord = {{ Position = 5, Size = {tipInfo.Size} }},");
-                        writer.WriteLine("\t\tPage = {");
-                        writer.WriteLine($"\t\t\t\"{tipInfo.Page}\"");
-                        writer.WriteLine("\t\t}");
-                        string lastword = id.Equals(lastKey) ? string.Empty : ",";
-                        writer.WriteLine($"\t}}{lastword}");
+                        TipBoxDB[count] = Info;
+                        count++;
                     }
                 }
-                writer.WriteLine(buffer.TrimEnd('\n'));
-                writer.WriteLine("}");
-                WriteEndTipbox(writer);
-            }
 
-            return TipBoxDB;
+                using (var writer = new StreamWriter("tipbox.lub", false, tipansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8))
+                {
+                    writer.WriteLine("tbl = {");
+
+                    // Sort the dictionary by ID (keys)
+                    var sortedKeys = TipBoxDB.Keys.OrderBy(id => id).ToList();
+
+                    if (sortedKeys.Count > 0)
+                    {
+                        var lastKey = sortedKeys.Last();
+                        foreach (var id in sortedKeys)
+                        {
+                            if (TipBoxDB.TryGetValue(id, out var tipInfo))
+                            {
+                                writer.WriteLine($"\t[{id}] = {{");
+                                writer.WriteLine($"\t\tTitle = \"{tipInfo.Title}\",");
+                                writer.WriteLine("\t\tSearch = 1,");
+                                writer.WriteLine($"\t\tImage = \"{tipInfo.Image}\",");
+                                writer.WriteLine($"\t\tImgcoord = {{ Position = 5, Size = {tipInfo.Size} }},");
+                                writer.WriteLine("\t\tPage = {");
+                                writer.WriteLine($"\t\t\t\"{tipInfo.Page}\"");
+                                writer.WriteLine("\t\t}");
+                                string lastword = id.Equals(lastKey) ? string.Empty : ",";
+                                writer.WriteLine($"\t}}{lastword}");
+                            }
+                        }
+                    }
+                    writer.WriteLine("}");
+                    WriteEndTipbox(writer);
+                }
+
+                return TipBoxDB;
+            }
+            catch (Exception ex)
+            {
+                LogError("GenerateTipboxFile", ex);
+                throw;
+            }
         }
 
         private void GenerateGuideMonsterLua(Dictionary<int, TipBoxInfo> TipBoxes,Dictionary<int, Monster> mobdb, Dictionary<string, Items> itemdb, Dictionary<int, Dictionary<string, int>> spawnData)
         {
-            // Ordena monstros por level asc (se empate, por Id)
-            var mobs = mobdb.Values
-                .OrderBy(m => m.Level)
-                .ThenBy(m => m.Id)
-                .ToList();
-
-            using (var sw = new StreamWriter("guide_monster.lub", false, tipansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8))
+            try
             {
-                sw.WriteLine("GuideMonster.TitleText = \"Monster\"");
-                sw.WriteLine("GuideMonster.MainMenuIndex = 2");
-                sw.WriteLine("GuideMonster.MainMenuTitle = \"Monster\"");
+                // Ordena monstros por level asc (se empate, por Id)
+                var mobs = mobdb.Values
+                    .OrderBy(m => m.Level)
+                    .ThenBy(m => m.Id)
+                    .ToList();
 
-                foreach (var mob in mobs)
-                {            
-                    if(!(spawnData.ContainsKey(mob.Id)))
-                    {
-                        continue;
-                    }
+                using (var sw = new StreamWriter("guide_monster.lub", false, tipansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8))
+                {
+                    sw.WriteLine("GuideMonster.TitleText = \"Monster\"");
+                    sw.WriteLine("GuideMonster.MainMenuIndex = 2");
+                    sw.WriteLine("GuideMonster.MainMenuTitle = \"Monster\"");
 
-                    string aegisName = mob.AegisName;
-                    
-                    // Calcula level range (padrão: min = max(1, lvl-10); max = min + 15)
-                    int minLv = Math.Max(1, mob.Level - 15);
-                    int maxLv = mob.Level + 15;
-
-                    // Monta string de drops: ^i[id] ^i[id2] ...
-                    var dropIds = new List<int>();
-                    foreach (var d in mob.Drops)
-                    {
-                        if (d == null) continue;
-                        if (itemdb.TryGetValue(d.AegisName, out var itm))
+                    foreach (var mob in mobs)
+                    {            
+                        if(!(spawnData.ContainsKey(mob.Id)))
                         {
-                            if (!dropIds.Contains(itm.Id))
-                                dropIds.Add(itm.Id);
-                        }
-                    }
-
-                    // Se não há drops mapeados, podemos pular ou gerar com string vazia
-                    if (dropIds.Count == 0)
-                    {
-                        if(Properties.Settings.Default.dropable)
                             continue;
+                        }
+
+                        string aegisName = mob.AegisName;
+                        
+                        // Calcula level range (padrão: min = max(1, lvl-10); max = min + 15)
+                        int minLv = Math.Max(1, mob.Level - 15);
+                        int maxLv = mob.Level + 15;
+
+                        // Monta string de drops: ^i[id] ^i[id2] ...
+                        var dropIds = new List<int>();
+                        foreach (var d in mob.Drops)
+                        {
+                            if (d == null) continue;
+                            if (itemdb.TryGetValue(d.AegisName, out var itm))
+                            {
+                                if (!dropIds.Contains(itm.Id))
+                                    dropIds.Add(itm.Id);
+                            }
+                        }
+
+                        // Se não há drops mapeados, podemos pular ou gerar com string vazia
+                        if (dropIds.Count == 0)
+                        {
+                            if(Properties.Settings.Default.dropable)
+                                continue;
+                        }
+
+                        string dropsStr = string.Join(" ", dropIds.Select(i => $"^i[{i}]"));
+
+                        // Escreve a linha GuideMonster:AddContents("AegisName", min, max, "drops")
+                        // Observação: no seu modelo o nome do monstro é string simples (sem escapar), garante que o aegisName esteja limpo
+                        sw.WriteLine($"GuideMonster:AddContents(\"{aegisName}\", {minLv}, {maxLv}, \"{dropsStr}\")");
                     }
-
-                    string dropsStr = string.Join(" ", dropIds.Select(i => $"^i[{i}]"));
-
-                    // Escreve a linha GuideMonster:AddContents("AegisName", min, max, "drops")
-                    // Observação: no seu modelo o nome do monstro é string simples (sem escapar), garante que o aegisName esteja limpo
-                    sw.WriteLine($"GuideMonster:AddContents(\"{aegisName}\", {minLv}, {maxLv}, \"{dropsStr}\")");
                 }
+            }
+            catch (Exception ex)
+            {
+                LogError("GenerateGuideMonsterLua", ex);
+                throw;
             }
         }
 
         private void GenerateGuideWeaponLua(Dictionary<int, TipBoxInfo> TipBoxes, Dictionary<int, Monster> mobdb, Dictionary<string, Items> itemdb)
         {
-            // Ordena monstros por level asc (se empate, por Id)
-            var items = itemdb.Values
-                .OrderBy(m => m.EquipLevelMin)
-                .ThenBy(m => m.Id)
-                .ToList();
-
-            using (var sw = new StreamWriter("guide_weapon.lub", false, tipansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8))
+            try
             {
-                sw.WriteLine("GuideWeapon.TitleText = \"Weapon\"");
-                sw.WriteLine("GuideWeapon.MainMenuIndex = 5");
-                sw.WriteLine("GuideWeapon.MainMenuTitle = \"Weapon\"");
-                sw.WriteLine("GuideWeapon:AddSubMenu(0, \"Dagger\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(1, \"One - Handed Sword\", 1, 999)");              
-                sw.WriteLine("GuideWeapon:AddSubMenu(2, \"One - Handed Spear\", 1, 999)");           
-                sw.WriteLine("GuideWeapon:AddSubMenu(3, \"One - Handed Axe\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(4, \"Mace\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(5, \"One - Handed Staff\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(6, \"Knuckle\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(7, \"Musical Instrument\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(8, \"Whip\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(9, \"Book\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(10, \"Two - Handed Sword\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(11, \"Two - Handed Spear\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(12, \"Two - Handed Axe\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(13, \"Katar\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(14, \"Bow\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(15, \"Huuma Shuriken\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(16, \"Two - Handed Staff\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(17, \"Revover\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(18, \"Rifle\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(19, \"Gatling Gun\", 1, 999)");
-                sw.WriteLine("GuideWeapon:AddSubMenu(20, \"Shotgun\", 1, 999)");                        
-                sw.WriteLine("GuideWeapon:AddSubMenu(21, \"Grenade Launcher\", 1, 999)");
-                foreach (var item in items)
-                {
-                    if (item.Type.ToLower() != "weapon")
-                        continue;
+                // Ordena monstros por level asc (se empate, por Id)
+                var items = itemdb.Values
+                    .OrderBy(m => m.EquipLevelMin)
+                    .ThenBy(m => m.Id)
+                    .ToList();
 
-                    int minLv = Math.Max(item.EquipLevelMin - 100, 1);
-                    int maxLv = Math.Min(999, minLv + 100);
-                    int tipboxId = GetTipBoxPosition(TipBoxes, item.Id);
-                    if (Properties.Settings.Default.dropable)
+                using (var sw = new StreamWriter("guide_weapon.lub", false, tipansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8))
+                {
+                    sw.WriteLine("GuideWeapon.TitleText = \"Weapon\"");
+                    sw.WriteLine("GuideWeapon.MainMenuIndex = 5");
+                    sw.WriteLine("GuideWeapon.MainMenuTitle = \"Weapon\"");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(0, \"Dagger\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(1, \"One - Handed Sword\", 1, 999)");              
+                    sw.WriteLine("GuideWeapon:AddSubMenu(2, \"One - Handed Spear\", 1, 999)");           
+                    sw.WriteLine("GuideWeapon:AddSubMenu(3, \"One - Handed Axe\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(4, \"Mace\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(5, \"One - Handed Staff\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(6, \"Knuckle\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(7, \"Musical Instrument\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(8, \"Whip\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(9, \"Book\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(10, \"Two - Handed Sword\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(11, \"Two - Handed Spear\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(12, \"Two - Handed Axe\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(13, \"Katar\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(14, \"Bow\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(15, \"Huuma Shuriken\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(16, \"Two - Handed Staff\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(17, \"Revover\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(18, \"Rifle\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(19, \"Gatling Gun\", 1, 999)");
+                    sw.WriteLine("GuideWeapon:AddSubMenu(20, \"Shotgun\", 1, 999)");                        
+                    sw.WriteLine("GuideWeapon:AddSubMenu(21, \"Grenade Launcher\", 1, 999)");
+                    foreach (var item in items)
                     {
-                        if (tipboxId <= 0)
+                        if (item.Type?.ToLower() != "weapon")
                             continue;
+
+                        int minLv = Math.Max(item.EquipLevelMin - 100, 1);
+                        int maxLv = Math.Min(999, minLv + 100);
+                        int tipboxId = GetTipBoxPosition(TipBoxes, item.Id);
+                        if (Properties.Settings.Default.dropable)
+                        {
+                            if (tipboxId <= 0)
+                                continue;
+                        }
+                        string stream = $"GuideWeapon:AddContents({item.Id}, {GetWeaponTableValue(item.SubType)}, {minLv}, {maxLv}, {item.Refinable}, 0, {item.Gradeable}, \"\",";
+                        if (tipboxId >= 0)
+                            stream += $"\">> <TIPBOX>{item.Name}<INFO>{tipboxId}</INFO></TIPBOX>\")";
+                        else
+                            stream += "\"\")";
+                        sw.WriteLine(stream);
                     }
-                    string stream = $"GuideWeapon:AddContents({item.Id}, {GetWeaponTableValue(item.SubType)}, {minLv}, {maxLv}, {item.Refinable}, 0, {item.Gradeable}, \"\",";
-                    if (tipboxId >= 0)
-                        stream += $"\">> <TIPBOX>{item.Name}<INFO>{tipboxId}</INFO></TIPBOX>\")";
-                    else
-                        stream += "\"\")";
-                    sw.WriteLine(stream);
                 }
+            }
+            catch (Exception ex)
+            {
+                LogError("GenerateGuideWeaponLua", ex);
+                throw;
             }
         }
 
@@ -1092,6 +1331,7 @@ namespace TipboxToDatabase
 
         private int GetWeaponTableValue(string val)
         {
+            if (val == null) return 0;
             switch (val.ToLower())
             {
                 case "dagger": return 0;
@@ -1137,48 +1377,56 @@ namespace TipboxToDatabase
 
         private void GenerateGuideArmorLua(Dictionary<int, TipBoxInfo> TipBoxes, Dictionary<int, Monster> mobdb, Dictionary<string, Items> itemdb)
         {
-            // Ordena monstros por level asc (se empate, por Id)
-            var items = itemdb.Values
-                .OrderBy(m => m.EquipLevelMin)
-                .ThenBy(m => m.Id)
-                .ToList();
-
-            using (var sw = new StreamWriter("guide_armor.lub", false, tipansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8))
+            try
             {
-                sw.WriteLine("GuideArmor.TitleText = \"Armor\"");
-                sw.WriteLine("GuideArmor.MainMenuIndex = 6");
-                sw.WriteLine("GuideArmor.MainMenuTitle = \"Armor\"");
-                sw.WriteLine("GuideArmor:AddSubMenu(0, \"Upper Headgear\", 1, 999)");
-                sw.WriteLine("GuideArmor:AddSubMenu(1, \"Middle Headgear\", 1, 999)");
-                sw.WriteLine("GuideArmor:AddSubMenu(2, \"Lower Headgear\", 1, 999)");
-                sw.WriteLine("GuideArmor:AddSubMenu(3, \"Armor\", 1, 999)");
-                sw.WriteLine("GuideArmor:AddSubMenu(4, \"Garment\", 1, 999)");
-                sw.WriteLine("GuideArmor:AddSubMenu(5, \"Shield\", 1, 999)");
-                sw.WriteLine("GuideArmor:AddSubMenu(6, \"Shoes\", 1, 999)");
-                sw.WriteLine("GuideArmor:AddSubMenu(7, \"Accessory\", 1, 999)");
-                sw.WriteLine("GuideArmor:AddSubMenu(8, \"Accessory Right\", 1, 999)");
-                sw.WriteLine("GuideArmor:AddSubMenu(9, \"Accessory Left\", 1, 999)");
-                foreach (var item in items)
-                {
-                    if (item.Type.ToLower() != "armor")
-                        continue;
-                    
-                    int minLv = Math.Max(item.EquipLevelMin,1);
-                    int maxLv = Math.Min(275, minLv + 100);
+                // Ordena monstros por level asc (se empate, por Id)
+                var items = itemdb.Values
+                    .OrderBy(m => m.EquipLevelMin)
+                    .ThenBy(m => m.Id)
+                    .ToList();
 
-                    int tipboxId = GetTipBoxPosition(TipBoxes, item.Id);
-                    if (Properties.Settings.Default.dropable)
+                using (var sw = new StreamWriter("guide_armor.lub", false, tipansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8))
+                {
+                    sw.WriteLine("GuideArmor.TitleText = \"Armor\"");
+                    sw.WriteLine("GuideArmor.MainMenuIndex = 6");
+                    sw.WriteLine("GuideArmor.MainMenuTitle = \"Armor\"");
+                    sw.WriteLine("GuideArmor:AddSubMenu(0, \"Upper Headgear\", 1, 999)");
+                    sw.WriteLine("GuideArmor:AddSubMenu(1, \"Middle Headgear\", 1, 999)");
+                    sw.WriteLine("GuideArmor:AddSubMenu(2, \"Lower Headgear\", 1, 999)");
+                    sw.WriteLine("GuideArmor:AddSubMenu(3, \"Armor\", 1, 999)");
+                    sw.WriteLine("GuideArmor:AddSubMenu(4, \"Garment\", 1, 999)");
+                    sw.WriteLine("GuideArmor:AddSubMenu(5, \"Shield\", 1, 999)");
+                    sw.WriteLine("GuideArmor:AddSubMenu(6, \"Shoes\", 1, 999)");
+                    sw.WriteLine("GuideArmor:AddSubMenu(7, \"Accessory\", 1, 999)");
+                    sw.WriteLine("GuideArmor:AddSubMenu(8, \"Accessory Right\", 1, 999)");
+                    sw.WriteLine("GuideArmor:AddSubMenu(9, \"Accessory Left\", 1, 999)");
+                    foreach (var item in items)
                     {
-                        if (tipboxId <= 0)
+                        if (item.Type?.ToLower() != "armor")
                             continue;
+                        
+                        int minLv = Math.Max(item.EquipLevelMin,1);
+                        int maxLv = Math.Min(275, minLv + 100);
+
+                        int tipboxId = GetTipBoxPosition(TipBoxes, item.Id);
+                        if (Properties.Settings.Default.dropable)
+                        {
+                            if (tipboxId <= 0)
+                                continue;
+                        }
+                        string stream = $"GuideArmor:AddContents({item.Id}, {item.Location}, {minLv}, {maxLv}, {item.Refinable}, 0, {item.Gradeable}, \"\",";
+                        if (tipboxId > 0)
+                            stream += $"\">> <TIPBOX>{item.Name}<INFO>{tipboxId}</INFO></TIPBOX>\")";
+                        else
+                            stream += "\"\")";
+                        sw.WriteLine(stream);
                     }
-                    string stream = $"GuideArmor:AddContents({item.Id}, {item.Location}, {minLv}, {maxLv}, {item.Refinable}, 0, {item.Gradeable}, \"\",";
-                    if (tipboxId > 0)
-                        stream += $"\">> <TIPBOX>{item.Name}<INFO>{tipboxId}</INFO></TIPBOX>\")";
-                    else
-                        stream += "\"\")";
-                    sw.WriteLine(stream);
                 }
+            }
+            catch (Exception ex)
+            {
+                LogError("GenerateGuideArmorLua", ex);
+                throw;
             }
         }
 
