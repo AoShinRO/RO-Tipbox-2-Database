@@ -407,8 +407,24 @@ namespace TipboxToDatabase
             }
             catch (Exception ex)
             {
-                LogError("ParseCardYaml", ex);
-                throw;
+                int line = 0, col = 0;
+                var startProp = ex.GetType().GetProperty("Start");
+                if (startProp != null)
+                {
+                    var startVal = startProp.GetValue(ex, null);
+                    if (startVal != null)
+                    {
+                        var lineProp = startVal.GetType().GetProperty("Line");
+                        var colProp = startVal.GetType().GetProperty("Column");
+                        if (lineProp != null) line = (int)lineProp.GetValue(startVal, null);
+                        if (colProp != null) col = (int)colProp.GetValue(startVal, null);
+                    }
+                }
+
+                string locationInfo = line > 0 ? $" (Linha {line}, Coluna {col})" : "";
+                var enrichedEx = new Exception($"Erro no YAML {Path.GetFileName(filePath)}{locationInfo}: {ex.Message}", ex);
+                LogError("ParseCardYaml", enrichedEx);
+                throw enrichedEx;
             }
         }
 
@@ -434,106 +450,129 @@ namespace TipboxToDatabase
                     var filePath = filePaths[i];
                     var encoding = ansiChecks[i] ? Encoding.GetEncoding(1252) : Encoding.UTF8;
 
-                    using (var reader = new StreamReader(filePath, encoding))
+                    try
                     {
-                        var yamlStream = new YamlStream();
-                        yamlStream.Load(reader);
-
-                        if (yamlStream.Documents.Count == 0)
+                        using (var reader = new StreamReader(filePath, encoding))
                         {
-                            throw new InvalidDataException($"O arquivo YAML {System.IO.Path.GetFileName(filePath)} não possui documentos.");
-                        }
+                            var yamlStream = new YamlStream();
+                            yamlStream.Load(reader);
 
-                        // Access the root node
-                        var rootNode = yamlStream.Documents[0].RootNode as YamlMappingNode;
-                        if (rootNode == null)
-                        {
-                            throw new InvalidDataException($"O nó raiz do arquivo {System.IO.Path.GetFileName(filePath)} é inválido.");
-                        }
-
-                        var bodyKey = new YamlScalarNode("Body");
-                        if (!rootNode.Children.ContainsKey(bodyKey))
-                        {
-                            throw new InvalidDataException($"O nó 'Body' não foi encontrado no arquivo {System.IO.Path.GetFileName(filePath)}.");
-                        }
-
-                        var bodyNode = rootNode.Children[bodyKey] as YamlSequenceNode;
-                        if (bodyNode == null)
-                        {
-                            throw new InvalidDataException($"O nó 'Body' no arquivo {System.IO.Path.GetFileName(filePath)} não é uma sequência válida.");
-                        }
-
-                        StatusText.Text = $"Reading {System.IO.Path.GetFileName(filePath)}";
-
-                        // Iterate through each item node
-                        foreach (YamlMappingNode itemNode in bodyNode)
-                        {
-                            int idVal = 0;
-                            if (itemNode.Children.ContainsKey(new YamlScalarNode("Id")))
+                            if (yamlStream.Documents.Count == 0)
                             {
-                                int.TryParse(itemNode["Id"]?.ToString(), out idVal);
+                                throw new InvalidDataException($"O arquivo YAML {System.IO.Path.GetFileName(filePath)} não possui documentos.");
                             }
 
-                            int equipLevelMinVal = 0;
-                            if (itemNode.Children.ContainsKey(new YamlScalarNode("EquipLevelMin")))
+                            // Access the root node
+                            var rootNode = yamlStream.Documents[0].RootNode as YamlMappingNode;
+                            if (rootNode == null)
                             {
-                                int.TryParse(itemNode["EquipLevelMin"]?.ToString(), out equipLevelMinVal);
+                                throw new InvalidDataException($"O nó raiz do arquivo {System.IO.Path.GetFileName(filePath)} é inválido.");
                             }
 
-                            var item = new Items
+                            var bodyKey = new YamlScalarNode("Body");
+                            if (!rootNode.Children.ContainsKey(bodyKey))
                             {
-                                Id = idVal,
-                                Name = itemNode.Children.ContainsKey(new YamlScalarNode("Name"))
-                                    ? itemNode["Name"]?.ToString()
-                                    : string.Empty,
-                                AegisName = itemNode.Children.ContainsKey(new YamlScalarNode("AegisName"))
-                                    ? itemNode["AegisName"]?.ToString()
-                                    : string.Empty,
-                                Type = itemNode.Children.ContainsKey(new YamlScalarNode("Type"))
-                                    ? itemNode["Type"]?.ToString()
-                                    : string.Empty,
-                                SubType = itemNode.Children.ContainsKey(new YamlScalarNode("SubType"))
-                                    ? itemNode["SubType"]?.ToString()
-                                    : string.Empty,
-                                EquipLevelMin = equipLevelMinVal,
-                                Refinable = itemNode.Children.ContainsKey(new YamlScalarNode("Refinable")) && itemNode["Refinable"].ToString().ToLower() == "true"? 1 : 0,
-                                Gradeable = itemNode.Children.ContainsKey(new YamlScalarNode("Gradeable")) && itemNode["Gradeable"].ToString().ToLower() == "true"? 1 : 0
-                            };
+                                throw new InvalidDataException($"O nó 'Body' não foi encontrado no arquivo {System.IO.Path.GetFileName(filePath)}.");
+                            }
 
-                            if (itemNode.Children.ContainsKey(new YamlScalarNode("Locations")))
+                            var bodyNode = rootNode.Children[bodyKey] as YamlSequenceNode;
+                            if (bodyNode == null)
                             {
-                                var locNode = itemNode["Locations"] as YamlMappingNode;
-                                if (locNode != null)
+                                throw new InvalidDataException($"O nó 'Body' no arquivo {System.IO.Path.GetFileName(filePath)} não é uma sequência válida.");
+                            }
+
+                            StatusText.Text = $"Reading {System.IO.Path.GetFileName(filePath)}";
+
+                            // Iterate through each item node
+                            foreach (YamlMappingNode itemNode in bodyNode)
+                            {
+                                int idVal = 0;
+                                if (itemNode.Children.ContainsKey(new YamlScalarNode("Id")))
                                 {
-                                    foreach (var loc in locNode.Children)
-                                    {
-                                        string locationName = loc.Key.ToString();
-                                        bool value = false;
-                                        if (loc.Value != null)
-                                        {
-                                            bool.TryParse(loc.Value.ToString(), out value);
-                                        }
+                                    int.TryParse(itemNode["Id"]?.ToString(), out idVal);
+                                }
 
-                                        if (value && locationMap.TryGetValue(locationName, out int locId))
+                                int equipLevelMinVal = 0;
+                                if (itemNode.Children.ContainsKey(new YamlScalarNode("EquipLevelMin")))
+                                {
+                                    int.TryParse(itemNode["EquipLevelMin"]?.ToString(), out equipLevelMinVal);
+                                }
+
+                                var item = new Items
+                                {
+                                    Id = idVal,
+                                    Name = itemNode.Children.ContainsKey(new YamlScalarNode("Name"))
+                                        ? itemNode["Name"]?.ToString()
+                                        : string.Empty,
+                                    AegisName = itemNode.Children.ContainsKey(new YamlScalarNode("AegisName"))
+                                        ? itemNode["AegisName"]?.ToString()
+                                        : string.Empty,
+                                    Type = itemNode.Children.ContainsKey(new YamlScalarNode("Type"))
+                                        ? itemNode["Type"]?.ToString()
+                                        : string.Empty,
+                                    SubType = itemNode.Children.ContainsKey(new YamlScalarNode("SubType"))
+                                        ? itemNode["SubType"]?.ToString()
+                                        : string.Empty,
+                                    EquipLevelMin = equipLevelMinVal,
+                                    Refinable = itemNode.Children.ContainsKey(new YamlScalarNode("Refinable")) && itemNode["Refinable"].ToString().ToLower() == "true"? 1 : 0,
+                                    Gradeable = itemNode.Children.ContainsKey(new YamlScalarNode("Gradeable")) && itemNode["Gradeable"].ToString().ToLower() == "true"? 1 : 0
+                                };
+
+                                if (itemNode.Children.ContainsKey(new YamlScalarNode("Locations")))
+                                {
+                                    var locNode = itemNode["Locations"] as YamlMappingNode;
+                                    if (locNode != null)
+                                    {
+                                        foreach (var loc in locNode.Children)
                                         {
-                                            item.Location = locId;
-                                            break; // pegamos a primeira localização válida
+                                            string locationName = loc.Key.ToString();
+                                            bool value = false;
+                                            if (loc.Value != null)
+                                            {
+                                                bool.TryParse(loc.Value.ToString(), out value);
+                                            }
+
+                                            if (value && locationMap.TryGetValue(locationName, out int locId))
+                                            {
+                                                item.Location = locId;
+                                                break; // pegamos a primeira localização válida
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            else
-                            {
-                                item.Location = -1; // sem localização
-                            }
+                                else
+                                {
+                                    item.Location = -1; // sem localização
+                                }
 
-                            if (!string.IsNullOrEmpty(item.AegisName))
-                            {
-                                if (items.ContainsKey(item.AegisName))
-                                    continue;
-                                items[item.AegisName] = item;
+                                if (!string.IsNullOrEmpty(item.AegisName))
+                                {
+                                    if (items.ContainsKey(item.AegisName))
+                                        continue;
+                                    items[item.AegisName] = item;
+                                }
                             }
                         }
+                    }
+                    catch (Exception ex)
+                    {
+                        int line = 0, col = 0;
+                        var startProp = ex.GetType().GetProperty("Start");
+                        if (startProp != null)
+                        {
+                            var startVal = startProp.GetValue(ex, null);
+                            if (startVal != null)
+                            {
+                                var lineProp = startVal.GetType().GetProperty("Line");
+                                var colProp = startVal.GetType().GetProperty("Column");
+                                if (lineProp != null) line = (int)lineProp.GetValue(startVal, null);
+                                if (colProp != null) col = (int)colProp.GetValue(startVal, null);
+                            }
+                        }
+
+                        string locationInfo = line > 0 ? $" (Linha {line}, Coluna {col})" : "";
+                        var enrichedEx = new Exception($"Erro no YAML {Path.GetFileName(filePath)}{locationInfo}: {ex.Message}", ex);
+                        throw enrichedEx;
                     }
                 }
 
