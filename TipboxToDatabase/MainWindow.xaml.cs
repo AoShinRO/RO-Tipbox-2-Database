@@ -272,9 +272,7 @@ namespace TipboxToDatabase
                 using (var sw = new StreamWriter(logPath, true, Encoding.UTF8))
                 {
                     sw.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Função: {funcao}");
-                    sw.WriteLine($"Tipo: {ex.GetType().Name}");
-                    sw.WriteLine($"Mensagem: {ex.Message}");
-                    sw.WriteLine($"Stack Trace:\n{ex.StackTrace}");
+                    sw.WriteLine($"Detalhes da Exceção:\n{ex.ToString()}");
                     sw.WriteLine(new string('-', 80));
                 }
             }
@@ -370,8 +368,14 @@ namespace TipboxToDatabase
                     }
 
                     // Iterate through each monster node
-                    foreach (YamlMappingNode cardNode in bodyNode)
+                    foreach (YamlNode node in bodyNode.Children)
                     {
+                        var cardNode = node as YamlMappingNode;
+                        if (cardNode == null)
+                        {
+                            throw new InvalidDataException($"Entrada inválida no Body de {Path.GetFileName(filePath)} na linha {node.Start.Line}, coluna {node.Start.Column} (esperado um mapa de carta).");
+                        }
+
                         if (!cardNode.Children.ContainsKey(new YamlScalarNode("Type")) ||
                             cardNode["Type"]?.ToString() != "Card")
                             continue;
@@ -405,26 +409,16 @@ namespace TipboxToDatabase
 
                 return cards;
             }
-            catch (Exception ex)
+            catch (YamlDotNet.Core.YamlException ex)
             {
-                int line = 0, col = 0;
-                var startProp = ex.GetType().GetProperty("Start");
-                if (startProp != null)
-                {
-                    var startVal = startProp.GetValue(ex, null);
-                    if (startVal != null)
-                    {
-                        var lineProp = startVal.GetType().GetProperty("Line");
-                        var colProp = startVal.GetType().GetProperty("Column");
-                        if (lineProp != null) line = (int)lineProp.GetValue(startVal, null);
-                        if (colProp != null) col = (int)colProp.GetValue(startVal, null);
-                    }
-                }
-
-                string locationInfo = line > 0 ? $" (Linha {line}, Coluna {col})" : "";
-                var enrichedEx = new Exception($"Erro no YAML {Path.GetFileName(filePath)}{locationInfo}: {ex.Message}", ex);
+                var enrichedEx = new Exception($"Erro no YAML {Path.GetFileName(filePath)} (Linha {ex.Start.Line}, Coluna {ex.Start.Column}): {ex.Message}", ex);
                 LogError("ParseCardYaml", enrichedEx);
                 throw enrichedEx;
+            }
+            catch (Exception ex)
+            {
+                LogError("ParseCardYaml", ex);
+                throw;
             }
         }
 
@@ -484,8 +478,14 @@ namespace TipboxToDatabase
                             StatusText.Text = $"Reading {System.IO.Path.GetFileName(filePath)}";
 
                             // Iterate through each item node
-                            foreach (YamlMappingNode itemNode in bodyNode)
+                            foreach (YamlNode node in bodyNode.Children)
                             {
+                                var itemNode = node as YamlMappingNode;
+                                if (itemNode == null)
+                                {
+                                    throw new InvalidDataException($"Entrada inválida no Body de {Path.GetFileName(filePath)} na linha {node.Start.Line}, coluna {node.Start.Column} (esperado um mapa de item).");
+                                }
+
                                 int idVal = 0;
                                 if (itemNode.Children.ContainsKey(new YamlScalarNode("Id")))
                                 {
@@ -554,25 +554,14 @@ namespace TipboxToDatabase
                             }
                         }
                     }
+                    catch (YamlDotNet.Core.YamlException ex)
+                    {
+                        var enrichedEx = new Exception($"Erro no YAML {Path.GetFileName(filePath)} (Linha {ex.Start.Line}, Coluna {ex.Start.Column}): {ex.Message}", ex);
+                        throw enrichedEx;
+                    }
                     catch (Exception ex)
                     {
-                        int line = 0, col = 0;
-                        var startProp = ex.GetType().GetProperty("Start");
-                        if (startProp != null)
-                        {
-                            var startVal = startProp.GetValue(ex, null);
-                            if (startVal != null)
-                            {
-                                var lineProp = startVal.GetType().GetProperty("Line");
-                                var colProp = startVal.GetType().GetProperty("Column");
-                                if (lineProp != null) line = (int)lineProp.GetValue(startVal, null);
-                                if (colProp != null) col = (int)colProp.GetValue(startVal, null);
-                            }
-                        }
-
-                        string locationInfo = line > 0 ? $" (Linha {line}, Coluna {col})" : "";
-                        var enrichedEx = new Exception($"Erro no YAML {Path.GetFileName(filePath)}{locationInfo}: {ex.Message}", ex);
-                        throw enrichedEx;
+                        throw;
                     }
                 }
 
