@@ -83,5 +83,6 @@
             HorizontalAlignment="Left" VerticalAlignment="Top"
             Margin="643,11,0,0" Width="100" Height="40"
             Click="SelectFolderButton_Click" />
+        <TextBlock HorizontalAlignment="Left" TextWrapping="Wrap" FontFamily="Impact" FontSize="16" Text="By AoShinHo" VerticalAlignment="Top"/>
     </Grid>
 </Window>

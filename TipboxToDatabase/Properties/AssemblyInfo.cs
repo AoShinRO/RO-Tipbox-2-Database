@@ -8,12 +8,12 @@ using System.Windows;
 // conjunto de atributos. Altere estes valores de atributo para modificar as informações
 // associada a um assembly.
 [assembly: AssemblyTitle("TipboxToDatabase")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("Sua Database Completa de RO em 1 Clique")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("AoShinHo")]
 [assembly: AssemblyProduct("TipboxToDatabase")]
 [assembly: AssemblyCopyright("Copyright ©  2024")]
-[assembly: AssemblyTrademark("")]
+[assembly: AssemblyTrademark("AoShinHo")]
 [assembly: AssemblyCulture("")]
 
 // Definir ComVisible como false torna os tipos neste assembly invisíveis
