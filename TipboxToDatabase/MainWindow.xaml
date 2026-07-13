@@ -16,9 +16,9 @@
                 HorizontalAlignment="Left" VerticalAlignment="Top"
                 Margin="392,9,0,0" Width="200" Height="40"
                 Click="SelectItemInfoFile_Click" />
-        <Button Content="Generate tipbox.lub" FontFamily="Tahoma" FontWeight="Bold" 
+        <Button Content="Generate tipbox.lub and AdventureGuide Files" FontFamily="Tahoma" FontWeight="Bold" 
                 HorizontalAlignment="Left" VerticalAlignment="Top"
-                Margin="14,162,0,0" Width="732" Height="40"
+                Margin="14,162,0,0" Width="746" Height="40"
                 Click="GenerateTipbox_Click" />
         <Button Content="mob__db.yml" FontFamily="Tahoma" FontWeight="Bold"
             HorizontalAlignment="Left" VerticalAlignment="Top"
