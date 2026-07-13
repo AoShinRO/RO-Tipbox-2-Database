@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -161,11 +161,12 @@ namespace TipboxToDatabase
         {
             OpenFileDialog openFileDialog = new OpenFileDialog
             {
-                Filter = "ItemInfo files (*.lua;*.lub)|*.lua;*.lub"
+                Filter = "ItemInfo files (*.lua;*.lub)|*.lua;*.lub",
+                Multiselect = true
             };
             if (openFileDialog.ShowDialog() == true)
             {
-                itemInfoFilePath = openFileDialog.FileName;
+                itemInfoFilePath = string.Join("|", openFileDialog.FileNames);
                 Text2.Text = $"{itemInfoFilePath}";
                 Properties.Settings.Default.itemInfoFilePath = itemInfoFilePath;
             }
@@ -244,7 +245,7 @@ namespace TipboxToDatabase
             // Desabilitar o botão durante o processamento
             ConversionProgressBar.Value = 0;
             ConversionProgressBar.Maximum = 100;
-            StatusText.Text = "Generating tipbox.lub. Wait...";
+            StatusText.Text = "Generating files please await...";
             (sender as Button).IsEnabled = false;
             Properties.Settings.Default.Save();
             await Task.Delay(500);
@@ -270,18 +271,19 @@ namespace TipboxToDatabase
             await Task.Delay(200);
             StatusText.Text = "Reading mob_db.yml";
             var mobdbData = ParseMonsterYaml(mobdbFilePath);
+            var spawnData = ParseMobsFromFolder(mobspawfolder);
             ConversionProgressBar.Value = 75;
             await Task.Delay(200);
-            StatusText.Text = "Building tipbox.lub.";
+            StatusText.Text = "Building Files.";
             ConversionProgressBar.Value = 90;
             await Task.Delay(200);
-            Dictionary<int, TipBoxInfo> TipBoxes = GenerateTipboxFile(num2CardData, itemInfoData, cardaegis, mobdbData, items);
-            GenerateGuideMonsterLua(TipBoxes, mobdbData, items);
+            Dictionary<int, TipBoxInfo> TipBoxes = GenerateTipboxFile(num2CardData, itemInfoData, cardaegis, mobdbData, items, spawnData);
+            GenerateGuideMonsterLua(TipBoxes, mobdbData, items, spawnData);
             GenerateGuideWeaponLua(TipBoxes, mobdbData, items);
             GenerateGuideArmorLua(TipBoxes, mobdbData, items);
             await Task.Delay(200);
             ConversionProgressBar.Value = 100;
-            StatusText.Text = "tipbox.lub generated successfully.";
+            StatusText.Text = "Files generated successfully.";
             (sender).IsEnabled = true;
         }
 
@@ -627,45 +629,55 @@ namespace TipboxToDatabase
             return data;
         }
 
-        private Dictionary<int, (string Title, string Resource, List<string> Description)> ParseItemInfoFile(string filePath)
+        private Dictionary<int, (string Title, string Resource, List<string> Description)> ParseItemInfoFile(string filePaths)
         {
             var data = new Dictionary<int, (string, string, List<string>)>();
-            var content = File.ReadAllText(filePath, iiansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8);
+            string[] paths = filePaths.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
 
-            // Updated regex to match items with nested braces
-            var itemPattern = new Regex(@"\[(\d+)]\s*=\s*\{((?:[^{}]*\{[^{}]*\})*[^{}]*)\}", RegexOptions.Singleline);
-
-            foreach (Match match in itemPattern.Matches(content))
+            foreach (var filePath in paths)
             {
-                int id = int.Parse(match.Groups[1].Value); // Extract the item ID
-                string itemData = match.Groups[2].Value;  // Extract the entire item data block
+                if (!File.Exists(filePath)) continue;
 
-                // Extract `identifiedDisplayName`
-                var titleMatch = Regex.Match(itemData, @"\tidentifiedDisplayName\s*=\s*""(.*?)""");
-                string title = titleMatch.Success ? titleMatch.Groups[1].Value : string.Empty;
+                var content = File.ReadAllText(filePath, iiansi.IsChecked == true ? Encoding.GetEncoding(1252) : Encoding.UTF8);
 
-                // Extract `identifiedResourceName`
-                var resourceMatch = Regex.Match(itemData, @"\tidentifiedResourceName\s*=\s*""(.*?)""");
-                string resource = resourceMatch.Success ? resourceMatch.Groups[1].Value : string.Empty;
+                // Updated regex to match items with nested braces
+                var itemPattern = new Regex(@"\[(\d+)]\s*=\s*\{((?:[^{}]*\{[^{}]*\})*[^{}]*)\}", RegexOptions.Singleline);
 
-                // Extract `identifiedDescriptionName`
-                var descriptionMatch = Regex.Match(itemData, @"\tidentifiedDescriptionName\s*=\s*\{(.*?)\}", RegexOptions.Singleline);
-                string descriptionBlock = descriptionMatch.Success ? descriptionMatch.Groups[1].Value : string.Empty;
-
-                var descriptions = new List<string>();
-                if (!string.IsNullOrEmpty(descriptionBlock))
+                foreach (Match match in itemPattern.Matches(content))
                 {
-                    // Split and clean each description line
-                    foreach (var desc in descriptionBlock.Split(new[] { "\r", "\n", "," }, StringSplitOptions.RemoveEmptyEntries))
-                    {
-                        string trimmed = desc.Trim(' ', '"', '\t').Replace("\\", "").Replace("\\\"", "\""); // Handle escaped quotes
-                        if (!string.IsNullOrEmpty(trimmed))
-                            descriptions.Add(trimmed);
-                    }
-                }
+                    int id = int.Parse(match.Groups[1].Value); // Extract the item ID
+                    if (data.ContainsKey(id))
+                        continue;
 
-                // Add the parsed data to the dictionary
-                data[id] = (title, resource, descriptions);
+                    string itemData = match.Groups[2].Value;  // Extract the entire item data block
+
+                    // Extract `identifiedDisplayName`
+                    var titleMatch = Regex.Match(itemData, @"\tidentifiedDisplayName\s*=\s*""(.*?)""");
+                    string title = titleMatch.Success ? titleMatch.Groups[1].Value : string.Empty;
+
+                    // Extract `identifiedResourceName`
+                    var resourceMatch = Regex.Match(itemData, @"\tidentifiedResourceName\s*=\s*""(.*?)""");
+                    string resource = resourceMatch.Success ? resourceMatch.Groups[1].Value : string.Empty;
+
+                    // Extract `identifiedDescriptionName`
+                    var descriptionMatch = Regex.Match(itemData, @"\tidentifiedDescriptionName\s*=\s*\{(.*?)\}", RegexOptions.Singleline);
+                    string descriptionBlock = descriptionMatch.Success ? descriptionMatch.Groups[1].Value : string.Empty;
+
+                    var descriptions = new List<string>();
+                    if (!string.IsNullOrEmpty(descriptionBlock))
+                    {
+                        // Split and clean each description line
+                        foreach (var desc in descriptionBlock.Split(new[] { "\r", "\n", "," }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            string trimmed = desc.Trim(' ', '"', '\t').Replace("\\", "").Replace("\\\"", "\""); // Handle escaped quotes
+                            if (!string.IsNullOrEmpty(trimmed))
+                                descriptions.Add(trimmed);
+                        }
+                    }
+
+                    // Add the parsed data to the dictionary
+                    data[id] = (title, resource, descriptions);
+                }
             }
 
             return data;
@@ -745,7 +757,7 @@ namespace TipboxToDatabase
                 foreach (var line in lines)
                 {
                     // Ignorar linhas de comentários ou linhas vazias
-                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith("//"))
+                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith("//") || line.StartsWith("#"))
                     {
                         continue;
                     }
@@ -781,10 +793,9 @@ namespace TipboxToDatabase
             return mobDictionary;
         }
 
-        private Dictionary<int, TipBoxInfo> GenerateTipboxFile(Dictionary<int, string> num2CardData, Dictionary<int, (string Title, string Resource, List<string> Description)> itemInfoData, Dictionary<string, Card> carddb, Dictionary<int, Monster> mobdb, Dictionary<string, Items> itemdb)
+        private Dictionary<int, TipBoxInfo> GenerateTipboxFile(Dictionary<int, string> num2CardData, Dictionary<int, (string Title, string Resource, List<string> Description)> itemInfoData, Dictionary<string, Card> carddb, Dictionary<int, Monster> mobdb, Dictionary<string, Items> itemdb, Dictionary<int, Dictionary<string, int>> spawnData)
         {
             Dictionary<int, TipBoxInfo> TipBoxDB = new Dictionary<int, TipBoxInfo>();
-            var mobData = ParseMobsFromFolder(mobspawfolder);
             foreach (var id in mobdb.Keys)
             {
                 if (mobdb.TryGetValue(id, out var mobinfo))
@@ -795,11 +806,10 @@ namespace TipboxToDatabase
                         {
                             if (num2CardData.TryGetValue(thiscard.Id, out var cinfo))
                             {
-                                foreach (var mob in mobData)
+                                foreach (var mob in spawnData)
                                 {
                                     if (mob.Key == mobinfo.Id)
                                     {
-                                        
                                         TipBoxInfo Info = new TipBoxInfo();
                                         string page = string.Empty;
                                         page += $"Id: {mobinfo.Id}\\nName: {mobinfo.Name}\\nLevel: {mobinfo.Level}\\nHp: {mobinfo.Hp}\\nAttack: {mobinfo.Attack}\\nDefense: {mobinfo.Defense}\\nMagicDefense: {mobinfo.MagicDefense}\\nResistence: {mobinfo.Resistence}\\nMagicResistence: {mobinfo.Level}\\nStr: {mobinfo.Str}\\nVit: {mobinfo.Vit}\\nAgi: {mobinfo.Agi}\\nInt: {mobinfo.Int}\\nDex: {mobinfo.Dex}\\nLuk: {mobinfo.Luk}\\nSize: {mobinfo.Size}\\nRace: {mobinfo.Race}\\nElement: {mobinfo.Element}";
@@ -885,7 +895,7 @@ namespace TipboxToDatabase
                     {
                         if (mobdb.TryGetValue(mobid, out var mobinfo))
                         {
-                            foreach (var mob in mobData)
+                            foreach (var mob in spawnData)
                             {
                                 if (mob.Key == mobinfo.Id)
                                 {
@@ -954,7 +964,7 @@ namespace TipboxToDatabase
             return TipBoxDB;
         }
 
-        private void GenerateGuideMonsterLua(Dictionary<int, TipBoxInfo> TipBoxes,Dictionary<int, Monster> mobdb, Dictionary<string, Items> itemdb)
+        private void GenerateGuideMonsterLua(Dictionary<int, TipBoxInfo> TipBoxes,Dictionary<int, Monster> mobdb, Dictionary<string, Items> itemdb, Dictionary<int, Dictionary<string, int>> spawnData)
         {
             // Ordena monstros por level asc (se empate, por Id)
             var mobs = mobdb.Values
@@ -969,7 +979,12 @@ namespace TipboxToDatabase
                 sw.WriteLine("GuideMonster.MainMenuTitle = \"Monster\"");
 
                 foreach (var mob in mobs)
-                {              
+                {            
+                    if(!(spawnData.ContainsKey(mob.Id)))
+                    {
+                        continue;
+                    }
+
                     string aegisName = mob.AegisName;
                     
                     // Calcula level range (padrão: min = max(1, lvl-10); max = min + 15)
@@ -1019,7 +1034,7 @@ namespace TipboxToDatabase
                 sw.WriteLine("GuideWeapon.MainMenuTitle = \"Weapon\"");
                 sw.WriteLine("GuideWeapon:AddSubMenu(0, \"Dagger\", 1, 999)");
                 sw.WriteLine("GuideWeapon:AddSubMenu(1, \"One - Handed Sword\", 1, 999)");              
-                sw.WriteLine("GuideWeapon:AddSubMenu(2, \"Two - Handed Sword\", 1, 999)");           
+                sw.WriteLine("GuideWeapon:AddSubMenu(2, \"One - Handed Spear\", 1, 999)");           
                 sw.WriteLine("GuideWeapon:AddSubMenu(3, \"One - Handed Axe\", 1, 999)");
                 sw.WriteLine("GuideWeapon:AddSubMenu(4, \"Mace\", 1, 999)");
                 sw.WriteLine("GuideWeapon:AddSubMenu(5, \"One - Handed Staff\", 1, 999)");
@@ -1044,8 +1059,8 @@ namespace TipboxToDatabase
                     if (item.Type.ToLower() != "weapon")
                         continue;
 
-                    int minLv = Math.Max(item.EquipLevelMin, 1);
-                    int maxLv = Math.Min(275, minLv + 100);
+                    int minLv = Math.Max(item.EquipLevelMin - 100, 1);
+                    int maxLv = Math.Min(999, minLv + 100);
                     int tipboxId = GetTipBoxPosition(TipBoxes, item.Id);
                     if (Properties.Settings.Default.dropable)
                     {
@@ -1080,8 +1095,8 @@ namespace TipboxToDatabase
             switch (val.ToLower())
             {
                 case "dagger": return 0;
+                case "1hspear": return 2;
                 case "1hsword": return 1;
-                case "2hsword": return 2;
                 case "1haxe": return 3;
                 case "mace": return 4;
                 case "staff": return 5;
@@ -1089,7 +1104,7 @@ namespace TipboxToDatabase
                 case "musical": return 7;
                 case "whip": return 8;
                 case "book": return 9;
-                //case "2hsword": return 10;
+                case "2hsword": return 10;
                 case "2hspear": return 11;
                 case "2haxe": return 12;
                 case "katar": return 13;
