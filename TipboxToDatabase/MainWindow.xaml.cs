@@ -891,12 +891,16 @@ namespace TipboxToDatabase
                         var descriptions = new List<string>();
                         if (!string.IsNullOrEmpty(descriptionBlock))
                         {
-                            // Split and clean each description line
-                            foreach (var desc in descriptionBlock.Split(new[] { "\r", "\n", "," }, StringSplitOptions.RemoveEmptyEntries))
+                            // Extrai cada string Lua entre aspas duplas, respeitando aspas escapadas (\")
+                            // Assim vírgulas dentro do texto (ex: "0,5%") não quebram as linhas
+                            var luaStringPattern = new Regex("\"((?:\\\\.|[^\"\\\\])*)\"", RegexOptions.Singleline);
+                            foreach (Match luaMatch in luaStringPattern.Matches(descriptionBlock))
                             {
-                                string trimmed = desc.Trim(' ', '"', '\t').Replace("\\", "").Replace("\\\"", "\""); // Handle escaped quotes
-                                if (!string.IsNullOrEmpty(trimmed))
-                                    descriptions.Add(trimmed);
+                                string luaContent = luaMatch.Groups[1].Value
+                                    .Replace("\\\"", "\"")   // aspas escapadas → aspas reais
+                                    .Replace("\\\\", "\\");  // barra dupla escapada → barra simples
+                                if (!string.IsNullOrEmpty(luaContent))
+                                    descriptions.Add(luaContent);
                             }
                         }
 
