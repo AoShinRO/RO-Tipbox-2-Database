@@ -5,7 +5,7 @@
 ![Windows](https://img.shields.io/badge/OS-Windows_WPF-blue?style=for-the-badge&logo=windows)
 ![.NET](https://img.shields.io/badge/.NET_Framework-C%23-purple?style=for-the-badge&logo=dotnet)
 ![Ragnarok](https://img.shields.io/badge/Community-rAthena_Emulation-orange?style=for-the-badge)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/AoShinRO/RO-DB-Translator)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/AoShinRO/RO-Tipbox-2-Database)
 
 Cansado de editar a **Dicas (Tipbox)** e o **Guia de Aventura** do Ragnarok na mão, linha por linha? O **Tipbox Generator** faz o trabalho pesado por você.
 
